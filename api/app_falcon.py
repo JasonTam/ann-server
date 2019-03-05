@@ -2,24 +2,49 @@ import falcon
 from annoy import AnnoyIndex
 import ujson as json
 from time import time
+from typing import Dict, List, Tuple
+
+S3_URI_PREFIX = 's3://'
+
+
+def is_s3_path(path: str):
+    return path.startswith(S3_URI_PREFIX)
 
 
 def load_index(path_index: str, n_dim: int) -> AnnoyIndex:
     # The dist metric should be saved in the index
     u = AnnoyIndex(n_dim)
-    u.load(path_index)  # super fast, will just mmap the file
+
+    if is_s3_path(path_index):
+        import s3fs
+        from tempfile import NamedTemporaryFile
+        fs = s3fs.S3FileSystem()
+        with fs.open(path_index, 'rb') as f_s3, \
+                NamedTemporaryFile(delete=True) as f_tmp:
+            f_tmp.write(f_s3.read())
+            u.load(f_tmp.name)
+    else:
+        u.load(path_index)
     return u
 
 
-def load_ids(path_ids):
-    ids = open(path_ids, 'r').read().splitlines()
+def load_ids(path_ids: str) -> Tuple[List[str], Dict[str, int]]:
+    if is_s3_path(path_ids):
+        import s3fs
+        fs = s3fs.S3FileSystem()
+        open_fn = fs.open
+    else:
+        open_fn = open
+
+    ids = [s.decode('utf-8') for s in
+           open_fn(path_ids, 'rb').read().splitlines()]
     ids_d = dict(zip(ids, range(len(ids))))
     return ids, ids_d
 
 
 class ANNResource(object):
 
-    def __init__(self, path_index, path_ids, n_dim):
+    def __init__(self, path_index: str, path_ids: str, n_dim: int):
         self.path_index = path_index
         self.path_ids = path_ids
         self.n_dim = n_dim
@@ -84,11 +109,7 @@ class HealthcheckResource(object):
         resp.status = falcon.HTTP_200
 
 
-def build_app(
-        path_index='/home/jason/Documents/benchmarks/saved/glove1m.ann',
-        path_ids='/home/jason/Documents/benchmarks/saved/glove1m_ids',
-        n_dim=25,
-):
+def build_app(path_index: str, path_ids: str, n_dim: int):
     app = falcon.API()
 
     ann = ANNResource(path_index, path_ids, n_dim)
