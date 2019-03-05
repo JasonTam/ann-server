@@ -94,7 +94,11 @@ class RefreshResource(object):
         self.ann_resource = ann_resource
 
     def on_post(self, req, resp):
-        # TODO: this needs to be done async so it doesnt block all queries
+        """
+        Note: reloading may take a while if index stored remotely
+        Consider running async workers if so (ex. `gunicorn -k gevent`)
+        """
+
         self.ann_resource.load()
         resp.status = falcon.HTTP_200
 
