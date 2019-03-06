@@ -1,0 +1,10 @@
+falcon==1.4.1
+gunicorn==19.9.0
+gevent==1.3.0
+
+# Only use ujson with CPython (not PyPy)
+ujson==1.35
+
+s3fs==0.1.5
+
+annoy==1.15.1
