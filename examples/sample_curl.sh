@@ -6,7 +6,7 @@ curl \
    localhost:8000/ann \
     -XPOST \
     -H "Content-type: application/json" \
-    -d@$BASEDIR/sample_payload.json
+    -d@$BASEDIR/sample_payload2.json
 
 #    -d \
 #'{

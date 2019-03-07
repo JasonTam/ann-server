@@ -4,7 +4,7 @@ COPY requirements.txt requirements.txt
 
 RUN apk add --no-cache --virtual .build-deps \
   build-base \
-    && pip install -r requirements.txt \
+    && pip install -r requirements.txt --no-cache-dir \
     && find /usr/local \
         \( -type d -a -name test -o -name tests \) \
         -o \( -type f -a -name '*.pyc' -o -name '*.pyo' \) \
@@ -17,7 +17,7 @@ RUN apk add --no-cache --virtual .build-deps \
                 | sort -u \
     )" \
     && apk add --virtual .rundeps $runDeps \
-    && apk del .build-deps
+    && apk --purge del .build-deps
 
 COPY . .
 
