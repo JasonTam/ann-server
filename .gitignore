@@ -1,4 +1,7 @@
+lambdas/*/package
+lambdas/*/*.zip
 .idea/
+scrap/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
