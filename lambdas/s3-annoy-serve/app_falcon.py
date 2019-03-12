@@ -1,8 +1,8 @@
 import falcon
 from annoy import AnnoyIndex
-import ujson as json
+import json
 from time import time
-from typing import Dict, List, Tuple
+from typing import Dict, List, Tuple, Union
 import s3fs
 import os
 import datetime
@@ -13,26 +13,20 @@ S3_URI_PREFIX = 's3://'
 
 
 PATH_TMP = Path('/tmp')
-PATH_ANN_REMOTE = 's3://jason-garbage/ann/glove100/crap.tar'
+PATH_ANN_REMOTE = 's3://jason-garbage/ann/cats.tar'
 ANN_INDEX_KEY = 'index.ann'
 ANN_IDS_KEY = 'ids.txt'
 ANN_META_KEY = 'metadata.json'
 PATH_TIMESTAMP_LOCAL = '/tmp/timestamp.txt'
 
-
-# TODO: part of remote load fn
-fs = s3fs.S3FileSystem()
-# Write to timestamp file
-ann_tar = tarfile.open(fileobj=fs.open(PATH_ANN_REMOTE, 'rb'))
-ann_tar.extractall(PATH_TMP)
-#
+PathType = Union[Path, str]
 
 
-def is_s3_path(path: str):
-    return path.startswith(S3_URI_PREFIX)
+def is_s3_path(path: PathType):
+    return str(path).startswith(S3_URI_PREFIX)
 
 
-def needs_reload(path_ann_tar: str) -> bool:
+def needs_reload(path_tar: PathType) -> bool:
     if not os.path.isfile(PATH_TIMESTAMP_LOCAL):
         # Fresh container needs to download index
         return True
@@ -40,29 +34,46 @@ def needs_reload(path_ann_tar: str) -> bool:
         # Container re-use: check if new index exists on remote
         fs = s3fs.S3FileSystem()  # TODO: move to outer scope?
         local_mtime = datetime.datetime.fromtimestamp(
-            # os.path.getmtime(PATH_ANN_LOCAL),
             int(open(PATH_TIMESTAMP_LOCAL, 'r').read().strip()),
             tz=datetime.timezone.utc)
-        remote_mtime = fs.info(path_ann_tar)['LastModified']
+        remote_mtime = fs.info(path_tar)['LastModified']
 
         return remote_mtime > local_mtime
 
 
-def load_index(path_index: str, path_meta: str) -> AnnoyIndex:
-    # The dist metric should be saved in the index
-    n_dim = None  # TODO: should read from path_meta
-    u = AnnoyIndex(n_dim)
+def load_via_tar(path_tar: PathType = PATH_ANN_REMOTE):
+    fs = s3fs.S3FileSystem()
+    # Write to timestamp file
+    # Note: `fromisoformat` only in Py3.7
+    # ts_read = datetime.datetime.utcnow().isoformat()
+    ts_read = str(int(time()))
+    with open(PATH_TIMESTAMP_LOCAL, 'w') as f:
+        f.write(ts_read)
+    ann_tar = tarfile.open(fileobj=fs.open(path_tar, 'rb'))
+    ann_tar.extractall(PATH_TMP)
 
-    if is_s3_path(path_index):
-        fs = s3fs.S3FileSystem()  # TODO: move to outer scope?
-        fs.get(path_index, PATH_TMP / ANN_INDEX_KEY)
-        u.load(PATH_TMP / ANN_INDEX_KEY)
-    else:
-        u.load(path_index)
+    ann_index = load_index(
+        PATH_TMP/ANN_INDEX_KEY,
+        PATH_TMP/ANN_META_KEY,
+    )
+    ann_ids, ann_ids_d = load_ids(PATH_TMP/ANN_IDS_KEY)
+
+    return ann_index, ann_ids, ann_ids_d
+
+
+def load_index(path_index: PathType, path_meta: PathType) -> AnnoyIndex:
+    meta_d = json.load(open(path_meta, 'r'))
+    n_dim = meta_d['n_dim']
+    metric = meta_d['metric']
+    u = AnnoyIndex(
+        n_dim,
+        # metric=metric,  # The dist metric should be saved in the index
+    )
+    u.load(str(path_index))
     return u
 
 
-def load_ids(path_ids: str) -> Tuple[List[str], Dict[str, int]]:
+def load_ids(path_ids: PathType) -> Tuple[List[str], Dict[str, int]]:
     if is_s3_path(path_ids):
         fs = s3fs.S3FileSystem()  # TODO: move to outer scope?
         open_fn = fs.open
@@ -77,21 +88,18 @@ def load_ids(path_ids: str) -> Tuple[List[str], Dict[str, int]]:
 
 class ANNResource(object):
 
-    def __init__(self, path_index: str, path_ids: str, n_dim: int):
-        self.path_index = path_index
-        self.path_ids = path_ids
-        self.n_dim = n_dim
+    def __init__(self, path_tar: PathType):
+        self.path_tar = path_tar
 
         self.index = None
         self.ids, self.ids_d = None, None
 
         self.load()
 
-    def load(self, path_index=None, path_ids=None, n_dim=None):
+    def load(self, path_tar: str = None):
+        path_tar = path_tar or self.path_tar
         tic = time()
-        self.index = load_index(
-            path_index or self.path_index, n_dim or self.n_dim)
-        self.ids, self.ids_d = load_ids(path_ids or self.path_ids)
+        self.index, self.ids, self.ids_d = load_via_tar(path_tar)
         print(f'Done Loading! [{time() - tic} s]')
 
     def on_post(self, req, resp):
@@ -99,7 +107,7 @@ class ANNResource(object):
         # Check if our index is up to date (needs to be fast 99% of time)
         # and reload if out of date
         # Yes, we do this every time TODO: only do this on keep-warm calls
-        if needs_reload(self.path_index):
+        if needs_reload(self.path_tar):
             self.load()
 
         try:
@@ -122,9 +130,7 @@ class ANNResource(object):
 
     def tojson(self):
         return {
-            'path_index': self.path_index,
-            'path_ids': self.path_ids,
-            'n_dim': self.n_dim,
+            'path_tar': self.path_tar,
         }
 
 
@@ -153,10 +159,10 @@ class HealthcheckResource(object):
         resp.status = falcon.HTTP_200
 
 
-def build_app(path_index: str, path_ids: str, n_dim: int):
+def build_app(path_tar: PathType = PATH_ANN_REMOTE):
     app = falcon.API()
 
-    ann = ANNResource(path_index, path_ids, n_dim)
+    ann = ANNResource(path_tar)
     refresh = RefreshResource(ann)
     healthcheck = HealthcheckResource(ann)
 
