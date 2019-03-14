@@ -62,7 +62,7 @@ def lambda_handler(event, context):
 
     # Create tarball buffer
     buf = BytesIO()
-    with tarfile.open(fileobj=buf, mode='w') as tar_buf:
+    with tarfile.open(fileobj=buf, mode='w:gz') as tar_buf:
         print(f'[{datetime.now()-tic}] Add index...')
         # Add index
         tar_buf.add(PATH_DISK_SAVE, arcname='index.ann')
@@ -85,7 +85,7 @@ def lambda_handler(event, context):
 
     print(f'[{datetime.now()-tic}] Uploading tar to s3...')
     buf.seek(0)
-    with open_fn(f's3://{bucket}/ann/{key_base}.tar', 'wb') as fo:
+    with open_fn(f's3://{bucket}/ann/{key_base}.tar.gz', 'wb') as fo:
         copyfileobj(buf, fo)
 
     print(f'[{datetime.now()-tic}] Returning!')
