@@ -5,7 +5,8 @@ from annoy import AnnoyIndex
 from pathlib import Path
 from datetime import datetime
 import tarfile
-from io import BytesIO, StringIO
+from io import BytesIO
+from shutil import copyfileobj
 
 
 METRIC = 'angular'  # TODO: should come from some config
@@ -16,6 +17,8 @@ PATH_DISK_SAVE = '/tmp/index.ann'
 
 
 def lambda_handler(event, context):
+    tic = datetime.now()
+
     # `s3:ObjectCreated:Put` can only ever create 1 record. Take head.
     bucket = event['Records'][0]['s3']['bucket']['name']
     key = Path(event['Records'][0]['s3']['object']['key'])
@@ -26,11 +29,11 @@ def lambda_handler(event, context):
     print(f'Key: {key}', '\t', f'Key name: {key_name}')
     print(f'Path: {path_data}')
 
-    print('Establishing s3fs connection...')
+    print(f'[{datetime.now()-tic}] Establishing s3fs connection...')
     fs = s3fs.S3FileSystem()
     open_fn = fs.open
 
-    print('Streaming in vectors...')
+    print(f'[{datetime.now()-tic}] Streaming in vectors...')
     ts_read = datetime.utcnow().isoformat()
     ids = []
     with open_fn(path_data, 'rb') as f:
@@ -44,10 +47,10 @@ def lambda_handler(event, context):
             ann.add_item(i, v)
             ids.append(record[ID_KEY])
 
-    print('Building ANN...')
+    print(f'[{datetime.now()-tic}] Building ANN...')
     ann.build(N_TREES)
 
-    print('Prep Metadata')
+    print(f'[{datetime.now()-tic}] Prep Metadata')
     meta_d = {
         'vec_src': path_data,
         'metric': METRIC,
@@ -55,14 +58,16 @@ def lambda_handler(event, context):
         'timestamp_utc': ts_read,
     }
 
-    print('Exporting files...')
+    print(f'[{datetime.now()-tic}] Exporting files...')
 
     # Create tarball buffer
     buf = BytesIO()
     with tarfile.open(fileobj=buf, mode='w') as tar_buf:
+        print(f'[{datetime.now()-tic}] Add index...')
         # Add index
         tar_buf.add(PATH_DISK_SAVE, arcname='index.ann')
 
+        print(f'[{datetime.now()-tic}] Add ids...')
         # Add ids  TODO: will be lmdb
         info = tarfile.TarInfo(name='ids.txt')
         ids_bytes = '\n'.join(ids).encode('utf-8')
@@ -70,6 +75,7 @@ def lambda_handler(event, context):
         info.size = len(ids_bytes)
         tar_buf.addfile(tarinfo=info, fileobj=ids_buf)
 
+        print(f'[{datetime.now()-tic}] Add meta...')
         # Add Metadata
         info = tarfile.TarInfo(name='metadata.json')
         meta_bytes = json.dumps(meta_d).encode('utf-8')
@@ -77,11 +83,12 @@ def lambda_handler(event, context):
         info.size = len(meta_bytes)
         tar_buf.addfile(tarinfo=info, fileobj=meta_buf)
 
+    print(f'[{datetime.now()-tic}] Uploading tar to s3...')
     buf.seek(0)
     with open_fn(f's3://{bucket}/ann/{key_base}.tar', 'wb') as fo:
-        fo.write(buf.read())
+        copyfileobj(buf, fo)
 
-    print('Printing to stdout')
+    print(f'[{datetime.now()-tic}] Returning!')
     return {
         'statusCode': 200,
         'body': json.dumps('Done!')
