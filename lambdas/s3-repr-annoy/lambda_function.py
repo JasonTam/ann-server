@@ -15,6 +15,47 @@ ID_KEY = 'id'
 N_TREES = 10
 PATH_DISK_SAVE = '/tmp/index.ann'
 
+fs = s3fs.S3FileSystem()
+open_fn = fs.open
+
+
+def load_data(path_data):
+    ids = []
+    with open_fn(path_data, 'rb') as f:
+        for i, record in enumerate(avro.reader(f)):
+            v = record[FACTORS_KEY]
+            if i == 0:
+                n_dim = len(v)
+                ann = AnnoyIndex(n_dim, metric=METRIC)
+                ann.on_disk_build(PATH_DISK_SAVE)
+
+            ann.add_item(i, v)
+            ids.append(record[ID_KEY])
+    return ann, ids
+
+
+def create_tarball(ids, meta_d):
+    # Create tarball buffer
+    buf = BytesIO()
+    with tarfile.open(fileobj=buf, mode='w:gz') as tar_buf:
+        # Add index
+        tar_buf.add(PATH_DISK_SAVE, arcname='index.ann')
+
+        # Add ids  TODO: will be lmdb
+        info = tarfile.TarInfo(name='ids.txt')
+        ids_bytes = '\n'.join(ids).encode('utf-8')
+        ids_buf = BytesIO(ids_bytes)
+        info.size = len(ids_bytes)
+        tar_buf.addfile(tarinfo=info, fileobj=ids_buf)
+
+        # Add Metadata
+        info = tarfile.TarInfo(name='metadata.json')
+        meta_bytes = json.dumps(meta_d).encode('utf-8')
+        meta_buf = BytesIO(meta_bytes)
+        info.size = len(meta_bytes)
+        tar_buf.addfile(tarinfo=info, fileobj=meta_buf)
+    return buf
+
 
 def lambda_handler(event, context):
     tic = datetime.now()
@@ -29,23 +70,10 @@ def lambda_handler(event, context):
     print(f'Key: {key}', '\t', f'Key name: {key_name}')
     print(f'Path: {path_data}')
 
-    print(f'[{datetime.now()-tic}] Establishing s3fs connection...')
-    fs = s3fs.S3FileSystem()
-    open_fn = fs.open
-
     print(f'[{datetime.now()-tic}] Streaming in vectors...')
     ts_read = datetime.utcnow().isoformat()
-    ids = []
-    with open_fn(path_data, 'rb') as f:
-        for i, record in enumerate(avro.reader(f)):
-            v = record[FACTORS_KEY]
-            if i == 0:
-                n_dim = len(v)
-                ann = AnnoyIndex(n_dim, metric=METRIC)
-                ann.on_disk_build(PATH_DISK_SAVE)
-
-            ann.add_item(i, v)
-            ids.append(record[ID_KEY])
+    ann, ids = load_data(path_data)
+    n_dim = ann.f
 
     print(f'[{datetime.now()-tic}] Building ANN...')
     ann.build(N_TREES)
@@ -61,27 +89,7 @@ def lambda_handler(event, context):
     print(f'[{datetime.now()-tic}] Exporting files...')
 
     # Create tarball buffer
-    buf = BytesIO()
-    with tarfile.open(fileobj=buf, mode='w:gz') as tar_buf:
-        print(f'[{datetime.now()-tic}] Add index...')
-        # Add index
-        tar_buf.add(PATH_DISK_SAVE, arcname='index.ann')
-
-        print(f'[{datetime.now()-tic}] Add ids...')
-        # Add ids  TODO: will be lmdb
-        info = tarfile.TarInfo(name='ids.txt')
-        ids_bytes = '\n'.join(ids).encode('utf-8')
-        ids_buf = BytesIO(ids_bytes)
-        info.size = len(ids_bytes)
-        tar_buf.addfile(tarinfo=info, fileobj=ids_buf)
-
-        print(f'[{datetime.now()-tic}] Add meta...')
-        # Add Metadata
-        info = tarfile.TarInfo(name='metadata.json')
-        meta_bytes = json.dumps(meta_d).encode('utf-8')
-        meta_buf = BytesIO(meta_bytes)
-        info.size = len(meta_bytes)
-        tar_buf.addfile(tarinfo=info, fileobj=meta_buf)
+    buf = create_tarball(ids, meta_d)
 
     print(f'[{datetime.now()-tic}] Uploading tar to s3...')
     buf.seek(0)
