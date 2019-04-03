@@ -1,12 +1,12 @@
 docker_local_server_args := \
 	--rm \
-	--env AWS_PROFILE=jason \
+	--env AWS_PROFILE=s3-read \
 	--volume ~/.aws:/root/.aws \
 	--publish 8000:8000 \
 
 
 build:
-	 docker build -t crap .
+	 docker build -t ann-serve-poc .
 
 run-local:
-	docker run -it $(docker_local_server_args) crap
+	docker run -it $(docker_local_server_args) ann-serve-poc
