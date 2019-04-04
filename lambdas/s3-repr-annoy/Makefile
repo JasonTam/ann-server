@@ -1,14 +1,19 @@
 
-FN_AWS_NAME='test'
+FN_AWS_NAME='avro-repr-annoy'
 FN_FILE_NAME='lambda_function.py'
 ZIP_NAME='function.zip'
+
+pip_args := install \
+                --platform manylinux1_x86_64 \
+                --only-binary=:all: \
+                --target .
 
 install-libs:
 	mkdir -p package \
 	&& cd package \
 	&& git clone https://github.com/dim1tri/snappy-for-aws-lambda.git . \
-	&& pip install fastavro --target . \
-	&& pip install s3fs --no-deps --target . \
+	&& pip ${pip_args} fastavro \
+	&& pip ${pip_args} s3fs --no-deps \
 	&& pip install annoy --target .
 
 build:
