@@ -2,7 +2,7 @@ import falcon
 from annoy import AnnoyIndex
 import json
 from time import time
-from typing import Dict, List, Tuple, Union
+from typing import Dict, List, Tuple, Union, Any
 import s3fs
 import os
 import datetime
@@ -46,19 +46,19 @@ def load_via_tar(path_tar: PathType = PATH_ANN_REMOTE):
     # Write to timestamp file
     # Note: `fromisoformat` only in Py3.7
     # ts_read = datetime.datetime.utcnow().isoformat()
-    ts_read = str(int(time()))
+    ts_read = int(time())
     with open(PATH_TIMESTAMP_LOCAL, 'w') as f:
-        f.write(ts_read)
+        f.write(str(ts_read))
     ann_tar = tarfile.open(fileobj=fs.open(path_tar, 'rb'))
     ann_tar.extractall(PATH_TMP)
 
-    ann_index = load_index(
+    ann_index, meta_d = load_index(
         PATH_TMP/ANN_INDEX_KEY,
         PATH_TMP/ANN_META_KEY,
     )
     ann_ids, ann_ids_d = load_ids(PATH_TMP/ANN_IDS_KEY)
 
-    return ann_index, ann_ids, ann_ids_d
+    return ann_index, ann_ids, ann_ids_d, ts_read, meta_d
 
 
 def load_index(path_index: PathType, path_meta: PathType) -> AnnoyIndex:
@@ -67,10 +67,10 @@ def load_index(path_index: PathType, path_meta: PathType) -> AnnoyIndex:
     metric = meta_d['metric']
     u = AnnoyIndex(
         n_dim,
-        # metric=metric,  # The dist metric should be saved in the index
+        metric=metric,
     )
     u.load(str(path_index))
-    return u
+    return u, meta_d
 
 
 def load_ids(path_ids: PathType) -> Tuple[List[str], Dict[str, int]]:
@@ -91,16 +91,21 @@ class ANNResource(object):
     def __init__(self, path_tar: PathType):
         self.path_tar = path_tar
 
-        self.index = None
-        self.ids, self.ids_d = None, None
+        self.index: AnnoyIndex = None
+        self.ids: List[Any] = None
+        self.ids_d: Dict[Any, int] = None
+        self.ts_read: int = None
+        self.ann_meta_d: Dict[str, Any] = None
 
         self.load()
 
     def load(self, path_tar: str = None):
         path_tar = path_tar or self.path_tar
         tic = time()
-        self.index, self.ids, self.ids_d = load_via_tar(path_tar)
-        print(f'Done Loading! [{time() - tic} s]')
+        print(f'Loading: {path_tar}')
+        self.index, self.ids, self.ids_d, self.ts_read, self.ann_meta_d = \
+            load_via_tar(path_tar)
+        print(f'...Done Loading! [{time() - tic} s]')
 
     def on_post(self, req, resp):
 
@@ -131,6 +136,10 @@ class ANNResource(object):
     def tojson(self):
         return {
             'path_tar': self.path_tar,
+            'ann_meta': self.ann_meta_d,
+            'ts_read': self.ts_read,
+            'n_ids': len(self.ids),
+            'head5_ids': self.ids[:5],
         }
 
 
