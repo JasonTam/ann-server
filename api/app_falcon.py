@@ -61,7 +61,8 @@ def load_via_tar(path_tar: PathType = PATH_ANN_REMOTE):
     return ann_index, ann_ids, ann_ids_d, ts_read, meta_d
 
 
-def load_index(path_index: PathType, path_meta: PathType) -> AnnoyIndex:
+def load_index(path_index: PathType, path_meta: PathType) \
+        -> Tuple[AnnoyIndex, Dict]:
     meta_d = json.load(open(path_meta, 'r'))
     n_dim = meta_d['n_dim']
     metric = meta_d['metric']
