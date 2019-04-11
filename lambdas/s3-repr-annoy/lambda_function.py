@@ -43,7 +43,7 @@ def create_tarball(ids, meta_d):
 
         # Add ids  TODO: will be lmdb
         info = tarfile.TarInfo(name='ids.txt')
-        ids_bytes = '\n'.join(ids).encode('utf-8')
+        ids_bytes = '\n'.join(map(str, ids)).encode('utf-8')
         ids_buf = BytesIO(ids_bytes)
         info.size = len(ids_bytes)
         tar_buf.addfile(tarinfo=info, fileobj=ids_buf)
