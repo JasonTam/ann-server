@@ -209,9 +209,9 @@ def build_many_app(path_ann_dir: PathType):
 
         ann_name = Path(path_tar).stem.split('.')[0]
         # automatically handles url encoding
-        app.add_route(f"/{ann_name}/query", ann)
-        app.add_route(f"/{ann_name}/refresh", refresh)
-        app.add_route(f"/{ann_name}/", ann_health)
+        app.add_route(f"/ann/{ann_name}/query", ann)
+        app.add_route(f"/ann/{ann_name}/refresh", refresh)
+        app.add_route(f"/ann/{ann_name}/", ann_health)
 
         ann_l.append(falcon.uri.encode(ann_name))
         break
