@@ -1,6 +1,6 @@
 #!/bin/sh
 
-PATH_TAR='s3://mo-ml-dev/ann/dresses.tar.gz'
+PATH_TAR='s3://mo-ml-dev/sandbox/dresses.tar.gz'
 
 gunicorn \
     -k gevent \
