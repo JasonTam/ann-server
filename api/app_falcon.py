@@ -214,7 +214,6 @@ def build_many_app(path_ann_dir: PathType):
         app.add_route(f"/ann/{ann_name}/", ann_health)
 
         ann_l.append(falcon.uri.encode(ann_name))
-        break
 
     healthcheck = HealthcheckResource(ann_l)
     app.add_route('/', healthcheck)
