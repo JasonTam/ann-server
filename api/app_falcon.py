@@ -13,7 +13,6 @@ S3_URI_PREFIX = 's3://'
 
 
 PATH_TMP = Path('/tmp')
-PATH_ANN_REMOTE = 's3://jason-garbage/ann/cats.tar'
 ANN_INDEX_KEY = 'index.ann'
 ANN_IDS_KEY = 'ids.txt'
 ANN_META_KEY = 'metadata.json'
@@ -41,7 +40,7 @@ def needs_reload(path_tar: PathType) -> bool:
         return remote_mtime > local_mtime
 
 
-def load_via_tar(path_tar: PathType = PATH_ANN_REMOTE):
+def load_via_tar(path_tar: PathType):
     fs = s3fs.S3FileSystem()
     # Write to timestamp file
     # Note: `fromisoformat` only in Py3.7
@@ -55,7 +54,7 @@ def load_via_tar(path_tar: PathType = PATH_ANN_REMOTE):
     ann_index, meta_d = load_index(
         PATH_TMP/ANN_INDEX_KEY,
         PATH_TMP/ANN_META_KEY,
-    )
+        )
     ann_ids, ann_ids_d = load_ids(PATH_TMP/ANN_IDS_KEY)
 
     return ann_index, ann_ids, ann_ids_d, ts_read, meta_d
@@ -159,7 +158,7 @@ class RefreshResource(object):
         resp.status = falcon.HTTP_200
 
 
-class HealthcheckResource(object):
+class ANNHealthcheckResource(object):
 
     def __init__(self, ann_resource: ANNResource):
         self.ann_resource = ann_resource
@@ -169,7 +168,17 @@ class HealthcheckResource(object):
         resp.status = falcon.HTTP_200
 
 
-def build_app(path_tar: PathType = PATH_ANN_REMOTE):
+class HealthcheckResource(object):
+
+    def __init__(self, names):
+        self.names = names
+
+    def on_get(self, req, resp):
+        resp.body = json.dumps(self.names)
+        resp.status = falcon.HTTP_200
+
+
+def build_single_app(path_tar: PathType):
     app = falcon.API()
 
     ann = ANNResource(path_tar)
@@ -178,8 +187,35 @@ def build_app(path_tar: PathType = PATH_ANN_REMOTE):
 
     # handle all requests to the '/ann' URL path
     app.req_options.auto_parse_form_urlencoded = True
-    app.add_route('/ann', ann)
+    app.add_route('/query', ann)
     app.add_route('/refresh', refresh)
+    app.add_route('/', healthcheck)
+
+    return app
+
+
+def build_many_app(path_ann_dir: PathType):
+    app = falcon.API()
+    fs = s3fs.S3FileSystem()
+    ann_keys = fs.ls(path_ann_dir)
+    print(f'{len(ann_keys)} ann indexes found')
+
+    app.req_options.auto_parse_form_urlencoded = True
+    ann_l = []
+    for path_tar in ann_keys:
+        ann = ANNResource(path_tar)
+        refresh = RefreshResource(ann)
+        ann_health = ANNHealthcheckResource(ann)
+
+        ann_name = Path(path_tar).stem.split('.')[0]
+        # automatically handles url encoding
+        app.add_route(f"/{ann_name}/query", ann)
+        app.add_route(f"/{ann_name}/refresh", refresh)
+        app.add_route(f"/{ann_name}/", ann_health)
+
+        ann_l.append(falcon.uri.encode(ann_name))
+
+    healthcheck = HealthcheckResource(ann_l)
     app.add_route('/', healthcheck)
 
     return app

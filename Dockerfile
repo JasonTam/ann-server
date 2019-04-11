@@ -23,4 +23,4 @@ COPY . .
 
 EXPOSE 8000
 
-CMD ["./run_server.sh"]
+CMD ["./run_single.sh"]
