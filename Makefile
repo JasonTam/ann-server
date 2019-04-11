@@ -6,7 +6,7 @@ docker_local_server_args := \
 
 
 build:
-	 docker build -t ann-serve-poc .
+	 docker build -t ann-serve .
 
 run-local:
-	docker run -it $(docker_local_server_args) ann-serve-poc
+	docker run -it $(docker_local_server_args) ann-serve
