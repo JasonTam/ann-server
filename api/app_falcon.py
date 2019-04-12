@@ -12,7 +12,8 @@ from pathlib import Path
 S3_URI_PREFIX = 's3://'
 
 
-PATH_TMP = Path('/tmp')
+PATH_TMP = Path('/tmp/ann')
+PATH_TMP.parent.mkdir(parents=True, exist_ok=True)
 ANN_INDEX_KEY = 'index.ann'
 ANN_IDS_KEY = 'ids.txt'
 ANN_META_KEY = 'metadata.json'
@@ -41,6 +42,9 @@ def needs_reload(path_tar: PathType) -> bool:
 
 
 def load_via_tar(path_tar: PathType):
+    ann_name = Path(path_tar).stem.split('.')[0]
+    path_extract = PATH_TMP / ann_name
+
     fs = s3fs.S3FileSystem()
     # Write to timestamp file
     # Note: `fromisoformat` only in Py3.7
@@ -49,20 +53,27 @@ def load_via_tar(path_tar: PathType):
     with open(PATH_TIMESTAMP_LOCAL, 'w') as f:
         f.write(str(ts_read))
     ann_tar = tarfile.open(fileobj=fs.open(path_tar, 'rb'))
-    ann_tar.extractall(PATH_TMP)
 
-    ann_index, meta_d = load_index(
-        PATH_TMP/ANN_INDEX_KEY,
-        PATH_TMP/ANN_META_KEY,
-        )
-    ann_ids, ann_ids_d = load_ids(PATH_TMP/ANN_IDS_KEY)
+    ann_tar.extractall(path_extract)
 
-    return ann_index, ann_ids, ann_ids_d, ts_read, meta_d
+    meta_d = load_ann_meta(path_extract / ANN_META_KEY)
+    ann_ids, ann_ids_d = load_ids(path_extract / ANN_IDS_KEY)
+    ann_index_path = path_extract / ANN_INDEX_KEY
+
+    return ann_index_path, ann_ids, ann_ids_d, ts_read, meta_d
 
 
-def load_index(path_index: PathType, path_meta: PathType) \
-        -> Tuple[AnnoyIndex, Dict]:
+def load_ann_meta(path_meta: PathType) -> Dict:
     meta_d = json.load(open(path_meta, 'r'))
+    return meta_d
+
+
+def load_index(path_index: PathType,
+               meta_d: Dict) \
+        -> AnnoyIndex:
+    """ We rely on ANNOY's usage of mmap to be fast loading
+    (fast enough that we can load it on every single call)
+    """
     n_dim = meta_d['n_dim']
     metric = meta_d['metric']
     u = AnnoyIndex(
@@ -70,7 +81,7 @@ def load_index(path_index: PathType, path_meta: PathType) \
         metric=metric,
     )
     u.load(str(path_index))
-    return u, meta_d
+    return u
 
 
 def load_ids(path_ids: PathType) -> Tuple[List[str], Dict[str, int]]:
@@ -91,7 +102,10 @@ class ANNResource(object):
     def __init__(self, path_tar: PathType):
         self.path_tar = path_tar
 
-        self.index: AnnoyIndex = None
+        # not multithread-safe to do this with multiple indexes per server
+        # self.index: AnnoyIndex = None
+
+        self.path_index_local: str = None
         self.ids: List[Any] = None
         self.ids_d: Dict[Any, int] = None
         self.ts_read: int = None
@@ -103,16 +117,18 @@ class ANNResource(object):
         path_tar = path_tar or self.path_tar
         tic = time()
         print(f'Loading: {path_tar}')
-        self.index, self.ids, self.ids_d, self.ts_read, self.ann_meta_d = \
+        self.path_index_local, self.ids, self.ids_d, \
+            self.ts_read, self.ann_meta_d = \
             load_via_tar(path_tar)
         print(f'...Done Loading! [{time() - tic} s]')
 
     def on_post(self, req, resp):
-
         # Check if our index is up to date (needs to be fast 99% of time)
         # and reload if out of date
         # Yes, we do this every time TODO: only do this on keep-warm calls
         if needs_reload(self.path_tar):
+            print(f'Index [{self.path_tar}] needs to be reloaded'
+                  f'...doing that now...')
             self.load()
 
         try:
@@ -120,10 +136,13 @@ class ANNResource(object):
             payload_json = json.load(payload_json_buf)
             k = payload_json['k']
             neighbors_l = []
+
+            ann_index = load_index(self.path_index_local, self.ann_meta_d)
+
             for q_id in payload_json['ids']:
                 q_ind = self.ids_d[q_id]
                 neighbors = [self.ids[ind] for ind in
-                             self.index.get_nns_by_item(q_ind, k)]
+                             ann_index.get_nns_by_item(q_ind, k)]
                 neighbors_l.append(neighbors)
 
             resp.body = json.dumps(neighbors_l)
@@ -201,7 +220,7 @@ def build_many_app(path_ann_dir: PathType):
     print(f'{len(ann_keys)} ann indexes found')
 
     app.req_options.auto_parse_form_urlencoded = True
-    ann_l = []
+    ann_name_l = []
     for path_tar in ann_keys:
         ann = ANNResource(path_tar)
         refresh = RefreshResource(ann)
@@ -213,9 +232,12 @@ def build_many_app(path_ann_dir: PathType):
         app.add_route(f"/ann/{ann_name}/refresh", refresh)
         app.add_route(f"/ann/{ann_name}/", ann_health)
 
-        ann_l.append(falcon.uri.encode(ann_name))
+        ann_name_compat = falcon.uri.encode(ann_name)
+        ann_name_l.append(ann_name_compat)
 
-    healthcheck = HealthcheckResource(ann_l)
+    print('***Done loading all indexes***')
+
+    healthcheck = HealthcheckResource(ann_name_l)
     app.add_route('/', healthcheck)
 
     return app
