@@ -2,7 +2,7 @@ swagger: "2.0"
 info:
   version: 0.0.1
   title: Approximate Nearest Neighbor [ANN] Server
-host: <to-be-determined>
+host: 54.198.0.33:8000
 
 paths:
   /:
@@ -53,9 +53,9 @@ paths:
             $ref: '#/definitions/query_payload'
       responses:
         "200":
-          description: list of neighbors
+          description: batch of list of neighbors
           schema:
-            $ref: '#/definitions/variant_ids'
+            $ref: '#/definitions/batch_neighbors'
 
   /ann/{indexName}/refresh:
     post:
@@ -74,19 +74,29 @@ paths:
 definitions:
   variant_id:
     type: string
-    example: '208867'
+    example: '123'
   variant_ids:
     type: array
     items:
       $ref: '#/definitions/variant_id'
-    example: [ "208867", "212154", "290481"]
+    example: [ "123", "456", "789"]
+  batch_neighbors:
+    type: array
+    items:
+      $ref: '#/definitions/variant_ids'
+    example: [
+      ["123", "1231", "1232", "1233", "1234"],
+      ["456", "4561", "4562", "4563", "4564"],
+      ["789", "7891", "7892", "7893", "7894"]
+    ]
+
 
   query_payload:
     properties:
       k:
         description: number of neighbors to get (note- the first neighbor will be the same as the query, so ask for 1 more than you actually want)
         type: integer
-        example: 7
+        example: 5
       search_k:
         description: number of nodes to inspect (leave as -1 if unsure)
         type: integer
