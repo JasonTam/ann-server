@@ -2,15 +2,8 @@ swagger: "2.0"
 info:
   version: 0.0.1
   title: Approximate Nearest Neighbor [ANN] Server
-  license:
-    name: MIT
 host: <to-be-determined>
-schemes:
-  - http
-consumes:
-  - application/json
-produces:
-  - application/json
+
 paths:
   /:
     get:
@@ -43,6 +36,10 @@ paths:
     post:
       summary: Query the ANN index for neighbors
       operationId: queryAnn
+      consumes:
+        - application/json
+      produces:
+        - application/json
       parameters:
         - name: indexName
           in: path
