@@ -135,17 +135,18 @@ class ANNResource(object):
             payload_json_buf = req.bounded_stream
             payload_json = json.load(payload_json_buf)
             k = payload_json['k']
-            neighbors_l = []
 
             ann_index = load_index(self.path_index_local, self.ann_meta_d)
 
-            for q_id in payload_json['ids']:
-                q_ind = self.ids_d[q_id]
-                neighbors = [self.ids[ind] for ind in
-                             ann_index.get_nns_by_item(q_ind, k)]
-                neighbors_l.append(neighbors)
+            q_id = payload_json['id']
 
-            resp.body = json.dumps(neighbors_l)
+            q_ind = self.ids_d[q_id]
+            neighbors = [self.ids[ind] for ind in
+                         ann_index.get_nns_by_item(q_ind, k + 1)]
+            if q_id in neighbors:
+                neighbors.remove(q_id)
+
+            resp.body = json.dumps(neighbors)
             resp.status = falcon.HTTP_200
         except Exception as e:
             resp.body = json.dumps(
