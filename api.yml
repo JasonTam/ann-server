@@ -83,7 +83,10 @@ definitions:
 
 
   query_payload:
+    required: ['id', 'k']
     properties:
+      id:
+        $ref: '#/definitions/variant_id'
       k:
         description: number of neighbors to get (note- the first neighbor will be the same as the query, so ask for 1 more than you actually want)
         type: integer
@@ -92,8 +95,6 @@ definitions:
         description: (UNUSED) number of nodes to inspect (leave as -1 if unsure)
         type: integer
         example: -1
-      id:
-        $ref: '#/definitions/variant_id'
 
   ann_summary:
     properties:
