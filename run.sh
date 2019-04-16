@@ -12,6 +12,7 @@ else
 fi
 
 gunicorn \
+    --timeout 90 \
     -k gevent \
     -b 0.0.0.0:8000 \
     ${APP_FN}
