@@ -2,7 +2,7 @@ import falcon
 from annoy import AnnoyIndex
 import json
 from time import time
-from typing import Dict, List, Tuple, Union, Any
+from typing import Dict, List, Tuple, Union, Any, Optional
 import boto3
 from botocore.exceptions import ClientError
 import s3fs
@@ -20,9 +20,10 @@ PATH_TMP.parent.mkdir(parents=True, exist_ok=True)
 ANN_INDEX_KEY = 'index.ann'
 ANN_IDS_KEY = 'ids.txt'
 ANN_META_KEY = 'metadata.json'
-PATH_TIMESTAMP_LOCAL = '/tmp/timestamp.txt'
+TIMESTAMP_LOCAL_KEY = 'timestamp.txt'
 DYNAMO_ID = 'variant_id'
 DYNAMO_KEY = 'repr'
+DTYPE_FMT = 'f'  # float32 struct
 
 PathType = Union[Path, str]
 
@@ -33,43 +34,41 @@ def is_s3_path(path: PathType):
     return str(path).startswith(S3_URI_PREFIX)
 
 
-def needs_reload(path_local_ts_read, path_tar: PathType) -> bool:
-    if not os.path.isfile(PATH_TIMESTAMP_LOCAL):
-        # Fresh container needs to download index
+def needs_reload(path_tar: PathType,
+                 ts_read_utc: Optional[datetime.datetime],
+                 ) -> bool:
+    if ts_read_utc is None:
+        # no timestamp file means index is not downloaded/extracted yet
         return True
     else:
         # Container re-use: check if new index exists on remote
         fs = s3fs.S3FileSystem()  # TODO: move to outer scope?
-        local_mtime = datetime.datetime.fromtimestamp(
-            int(open(path_local_ts_read, 'r').read().strip()),
-            tz=datetime.timezone.utc)
         remote_mtime = fs.info(path_tar)['LastModified']
 
-        return remote_mtime > local_mtime
+        return remote_mtime > ts_read_utc
 
 
-def load_via_tar(path_tar: PathType, reload: bool = True):
-    ann_name = Path(path_tar).stem.split('.')[0]
-    path_extract = PATH_TMP / ann_name
-
+def load_via_tar(path_tar: PathType,
+                 path_extract: PathType,
+                 reload: bool = True):
+    path_local_ts_read = path_extract / TIMESTAMP_LOCAL_KEY
     if reload:
         fs = s3fs.S3FileSystem()
         # Write to timestamp file
         # Note: `fromisoformat` only in Py3.7
         # ts_read = datetime.datetime.utcnow().isoformat()
         ts_read = int(time())
-        with open(PATH_TIMESTAMP_LOCAL, 'w') as f:
-            f.write(str(ts_read))
         ann_tar = tarfile.open(fileobj=fs.open(path_tar, 'rb'))
         ann_tar.extractall(path_extract)
-    else:
-        ts_read = None
+
+        with open(path_local_ts_read, 'w') as f:
+            f.write(str(ts_read))
 
     meta_d = load_ann_meta(path_extract / ANN_META_KEY)
     ann_ids, ann_ids_d = load_ids(path_extract / ANN_IDS_KEY)
     ann_index_path = path_extract / ANN_INDEX_KEY
 
-    return ann_index_path, ann_ids, ann_ids_d, ts_read, meta_d
+    return ann_index_path, ann_ids, ann_ids_d, path_local_ts_read, meta_d
 
 
 def load_ann_meta(path_meta: PathType) -> Dict:
@@ -134,15 +133,26 @@ class ANNResource(object):
         self.path_index_local: str = None
         self.ids: List[Any] = None
         self.ids_d: Dict[Any, int] = None
-        self.ts_read: int = None
         self.ann_meta_d: Dict[str, Any] = None
 
-        self.load(reload=True)
-        # #TODO: need to fix `needs_reload` for multi-index
-        # if needs_reload(self.path_tar):
-        #     self.load(reload=True)
-        # else:
-        #     self.load(reload=False)
+        # There is a chance that the ANN is already downloaded in tmp
+        self.load(reload=needs_reload(self.path_tar, self.ts_read_utc))
+
+    @property
+    def path_extract(self) -> PathType:
+        ann_name = Path(self.path_tar).stem.split('.')[0]
+        return PATH_TMP / ann_name
+
+    @property
+    def ts_read_utc(self) -> Optional[datetime.datetime]:
+        path_local_ts_read = self.path_extract / TIMESTAMP_LOCAL_KEY
+        if not Path(path_local_ts_read).exists():
+            local_mtime = None
+        else:
+            local_mtime = datetime.datetime.fromtimestamp(
+                int(open(path_local_ts_read, 'r').read().strip()),
+                tz=datetime.timezone.utc)
+        return local_mtime
 
     def load(self, path_tar: str = None, reload: bool = True):
         path_tar = path_tar or self.path_tar
@@ -150,8 +160,7 @@ class ANNResource(object):
         print(f'Loading: {path_tar}')
         self.path_index_local, self.ids, self.ids_d, \
             ts_read, self.ann_meta_d = \
-            load_via_tar(path_tar, reload)
-        self.ts_read = self.ts_read or ts_read
+            load_via_tar(path_tar, self.path_extract, reload)
         print(f'...Done Loading! [{time() - tic} s]')
 
     def on_post(self, req, resp):
@@ -159,11 +168,10 @@ class ANNResource(object):
         # and reload if out of date
         # Yes, we do this every time TODO: only do this on keep-warm calls
 
-        ## TODO: need to fix `needs_reload`
-        # if needs_reload(self.path_tar):
-        #     print(f'Index [{self.path_tar}] needs to be reloaded'
-        #           f'...doing that now...')
-        #     self.load()
+        if needs_reload(self.path_tar, self.ts_read_utc):
+            print(f'Index [{self.path_tar}] needs to be reloaded'
+                  f'...doing that now...')
+            self.load()
 
         try:
             payload_json_buf = req.bounded_stream
@@ -182,7 +190,7 @@ class ANNResource(object):
             elif self.ooi_table is not None:
                 # Need to look up the vector and query by vector
                 q_emb = get_dynamo_emb(
-                    self.ooi_table, self.ann_meta_d['n_dim'], q_id)
+                    self.ooi_table, self.ann_meta_d['n_dim'] * DTYPE_FMT, q_id)
                 if q_emb is None:
                     raise Exception(
                         'Q is ooi and doesnt exist in the ooi dynamo table')
@@ -205,7 +213,7 @@ class ANNResource(object):
         return {
             'path_tar': self.path_tar,
             'ann_meta': self.ann_meta_d,
-            'ts_read': self.ts_read,
+            'ts_read': self.ts_read_utc.isoformat(),
             'n_ids': len(self.ids),
             'head5_ids': self.ids[:5],
         }
