@@ -2,11 +2,12 @@
 
 MODE=${1:-"many"}  # { "many" | "single" }
 PATH_ANN=${2:-"s3://mo-ml-dev/ann/"}
+OOI_TABLE=${3:-"img-reprs"}
 
 
 if [ ${MODE} = "many" ]
 then
-    APP_FN="api.app_falcon:build_many_app('$PATH_ANN')"
+    APP_FN="api.app_falcon:build_many_app('$PATH_ANN','$OOI_TABLE')"
 else
     APP_FN="api.app_falcon:build_single_app('$PATH_ANN')"
 fi
