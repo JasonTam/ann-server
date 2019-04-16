@@ -27,6 +27,7 @@ DTYPE_FMT = 'f'  # float32 struct
 
 PathType = Union[Path, str]
 
+s3 = s3fs.S3FileSystem()
 dynamodb = boto3.resource('dynamodb')
 
 
@@ -42,8 +43,7 @@ def needs_reload(path_tar: PathType,
         return True
     else:
         # Container re-use: check if new index exists on remote
-        fs = s3fs.S3FileSystem()  # TODO: move to outer scope?
-        remote_mtime = fs.info(path_tar)['LastModified']
+        remote_mtime = s3.info(path_tar)['LastModified']
 
         return remote_mtime > ts_read_utc
 
@@ -53,12 +53,11 @@ def load_via_tar(path_tar: PathType,
                  reload: bool = True):
     path_local_ts_read = path_extract / TIMESTAMP_LOCAL_KEY
     if reload:
-        fs = s3fs.S3FileSystem()
         # Write to timestamp file
         # Note: `fromisoformat` only in Py3.7
         # ts_read = datetime.datetime.utcnow().isoformat()
         ts_read = int(time())
-        ann_tar = tarfile.open(fileobj=fs.open(path_tar, 'rb'))
+        ann_tar = tarfile.open(fileobj=s3.open(path_tar, 'rb'))
         ann_tar.extractall(path_extract)
 
         with open(path_local_ts_read, 'w') as f:
@@ -94,8 +93,7 @@ def load_index(path_index: PathType,
 
 def load_ids(path_ids: PathType) -> Tuple[List[str], Dict[str, int]]:
     if is_s3_path(path_ids):
-        fs = s3fs.S3FileSystem()  # TODO: move to outer scope?
-        open_fn = fs.open
+        open_fn = s3.open
     else:
         open_fn = open
 
@@ -103,6 +101,18 @@ def load_ids(path_ids: PathType) -> Tuple[List[str], Dict[str, int]]:
            open_fn(path_ids, 'rb').read().splitlines()]
     ids_d = dict(zip(ids, range(len(ids))))
     return ids, ids_d
+
+
+def load_fallback_map(path_fallback_map: PathType) -> Dict[str, str]:
+    if is_s3_path(path_fallback_map):
+        open_fn = s3.open
+    else:
+        open_fn = open
+
+    with open_fn(path_fallback_map, 'rb') as f:
+        fallback_map = json.load(f)
+
+    return fallback_map
 
 
 def get_dynamo_emb(table,
@@ -134,6 +144,7 @@ class ANNResource(object):
         self.ids: List[Any] = None
         self.ids_d: Dict[Any, int] = None
         self.ann_meta_d: Dict[str, Any] = None
+        self.fallback_parent: 'ANNResource' = None
 
         # There is a chance that the ANN is already downloaded in tmp
         self.load(reload=needs_reload(self.path_tar, self.ts_read_utc))
@@ -163,6 +174,45 @@ class ANNResource(object):
             load_via_tar(path_tar, self.path_extract, reload)
         print(f'...Done Loading! [{time() - tic} s]')
 
+    def nn_from_payload(self, payload: Dict):
+        # TODO: parse and use `search_k`
+        k = payload['k']
+
+        ann_index = load_index(self.path_index_local, self.ann_meta_d)
+
+        q_id = payload['id']
+
+        if q_id in self.ids_d:
+            q_ind = self.ids_d[q_id]
+            neighbors = [self.ids[ind] for ind in
+                         ann_index.get_nns_by_item(q_ind, k + 1)]
+        elif self.ooi_table is not None:
+            # Need to look up the vector and query by vector
+            q_emb = get_dynamo_emb(
+                self.ooi_table, self.ann_meta_d['n_dim'] * DTYPE_FMT, q_id)
+            if q_emb is None:
+                raise Exception(
+                    'Q is ooi and doesnt exist in the ooi dynamo table')
+            neighbors = [self.ids[ind] for ind in
+                         ann_index.get_nns_by_vector(q_emb, k + 1)]
+        else:
+            # TODO: there's a chance Q is in the fallback parent index
+            # TODO: depending on how he indexes were created
+            raise Exception('Q is ooi and no ooi dynamo table was set')
+
+        if q_id in neighbors:
+            neighbors.remove(q_id)
+
+        # Fallback lookup if not enough neighbors
+        # TODO: there are some duplicated overheads by calling this
+        if self.fallback_parent is not None:
+            neighbors_fallback = self.fallback_parent.nn_from_payload(
+                {**payload, **{'k': k - len(neighbors)}}
+            )
+            neighbors += neighbors_fallback
+
+        return neighbors[:k]
+
     def on_post(self, req, resp):
         # Check if our index is up to date (needs to be fast 99% of time)
         # and reload if out of date
@@ -176,38 +226,18 @@ class ANNResource(object):
         try:
             payload_json_buf = req.bounded_stream
             payload_json = json.load(payload_json_buf)
-            # TODO: parse and use `search_k`
-            k = payload_json['k']
 
-            ann_index = load_index(self.path_index_local, self.ann_meta_d)
+            neighbors = self.nn_from_payload(payload_json)
 
-            q_id = payload_json['id']
-
-            if q_id in self.ids_d:
-                q_ind = self.ids_d[q_id]
-                neighbors = [self.ids[ind] for ind in
-                             ann_index.get_nns_by_item(q_ind, k + 1)]
-            elif self.ooi_table is not None:
-                # Need to look up the vector and query by vector
-                q_emb = get_dynamo_emb(
-                    self.ooi_table, self.ann_meta_d['n_dim'] * DTYPE_FMT, q_id)
-                if q_emb is None:
-                    raise Exception(
-                        'Q is ooi and doesnt exist in the ooi dynamo table')
-                neighbors = [self.ids[ind] for ind in
-                             ann_index.get_nns_by_vector(q_emb, k + 1)]
-            else:
-                raise Exception('Q is ooi and no ooi dynamo table was set')
-
-            if q_id in neighbors:
-                neighbors.remove(q_id)
-
-            resp.body = json.dumps(neighbors[:k])
+            resp.body = json.dumps(neighbors)
             resp.status = falcon.HTTP_200
         except Exception as e:
             resp.body = json.dumps(
                 {'Error': f'An internal server error has occurred:\n{e}'})
             resp.status = falcon.HTTP_500
+
+    def set_fallback(self, fallback_parent: 'ANNResource'):
+        self.fallback_parent = fallback_parent
 
     def tojson(self):
         return {
@@ -271,7 +301,9 @@ def build_single_app(path_tar: PathType):
 
 
 def build_many_app(path_ann_dir: PathType,
-                   ooi_table_name: str = None):
+                   ooi_table_name: str = None,
+                   path_fallback_map: PathType = None,
+                   ):
     """
 
     Args:
@@ -279,19 +311,20 @@ def build_many_app(path_ann_dir: PathType,
             ANN index, ids, and metadata files
         ooi_table_name: name of dynamo table to grab out-of-index
             vectors from
+        path_fallback_map: path to mapping from ANN name
+            to name of fallback ANN
 
     Returns: ANN api app
 
     """
     app = falcon.API()
-    fs = s3fs.S3FileSystem()
-    ann_keys = fs.ls(path_ann_dir)
+    ann_keys = s3.ls(path_ann_dir)
     print(f'{len(ann_keys)} ann indexes detected')
 
     ooi_table = dynamodb.Table(ooi_table_name) if ooi_table_name else None
 
     app.req_options.auto_parse_form_urlencoded = True
-    ann_name_l = []
+    ann_d: Dict[str, ANNResource] = {}
     for path_tar in ann_keys:
         ann = ANNResource(path_tar, ooi_table)
         refresh = RefreshResource(ann)
@@ -303,10 +336,20 @@ def build_many_app(path_ann_dir: PathType,
         app.add_route(f"/ann/{ann_name}/refresh", refresh)
         app.add_route(f"/ann/{ann_name}/", ann_health)
 
-        ann_name_compat = falcon.uri.encode(ann_name)
-        ann_name_l.append(ann_name_compat)
+        ann_d[ann_name] = ann
+    ann_name_l = [falcon.uri.encode(n) for n in ann_d.keys()]
 
     print('***Done loading all indexes***')
+
+    if path_fallback_map:
+        # Linking fallbacks
+        print('Linking fallback resources...')
+        # TODO: should check that there are no loops in fallback map
+        fallback_map = load_fallback_map(path_fallback_map)
+        for child, parent in fallback_map.items():
+            if child in ann_d:
+                ann_d[child].set_fallback(ann_d[parent])
+        print('... done linking fallbacks')
 
     healthcheck = HealthcheckResource(ann_name_l)
     app.add_route('/', healthcheck)
