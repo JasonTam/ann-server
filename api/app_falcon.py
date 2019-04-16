@@ -33,7 +33,7 @@ def is_s3_path(path: PathType):
     return str(path).startswith(S3_URI_PREFIX)
 
 
-def needs_reload(path_tar: PathType) -> bool:
+def needs_reload(path_local_ts_read, path_tar: PathType) -> bool:
     if not os.path.isfile(PATH_TIMESTAMP_LOCAL):
         # Fresh container needs to download index
         return True
@@ -41,27 +41,29 @@ def needs_reload(path_tar: PathType) -> bool:
         # Container re-use: check if new index exists on remote
         fs = s3fs.S3FileSystem()  # TODO: move to outer scope?
         local_mtime = datetime.datetime.fromtimestamp(
-            int(open(PATH_TIMESTAMP_LOCAL, 'r').read().strip()),
+            int(open(path_local_ts_read, 'r').read().strip()),
             tz=datetime.timezone.utc)
         remote_mtime = fs.info(path_tar)['LastModified']
 
         return remote_mtime > local_mtime
 
 
-def load_via_tar(path_tar: PathType):
+def load_via_tar(path_tar: PathType, reload: bool = True):
     ann_name = Path(path_tar).stem.split('.')[0]
     path_extract = PATH_TMP / ann_name
 
-    fs = s3fs.S3FileSystem()
-    # Write to timestamp file
-    # Note: `fromisoformat` only in Py3.7
-    # ts_read = datetime.datetime.utcnow().isoformat()
-    ts_read = int(time())
-    with open(PATH_TIMESTAMP_LOCAL, 'w') as f:
-        f.write(str(ts_read))
-    ann_tar = tarfile.open(fileobj=fs.open(path_tar, 'rb'))
-
-    ann_tar.extractall(path_extract)
+    if reload:
+        fs = s3fs.S3FileSystem()
+        # Write to timestamp file
+        # Note: `fromisoformat` only in Py3.7
+        # ts_read = datetime.datetime.utcnow().isoformat()
+        ts_read = int(time())
+        with open(PATH_TIMESTAMP_LOCAL, 'w') as f:
+            f.write(str(ts_read))
+        ann_tar = tarfile.open(fileobj=fs.open(path_tar, 'rb'))
+        ann_tar.extractall(path_extract)
+    else:
+        ts_read = None
 
     meta_d = load_ann_meta(path_extract / ANN_META_KEY)
     ann_ids, ann_ids_d = load_ids(path_extract / ANN_IDS_KEY)
@@ -135,25 +137,33 @@ class ANNResource(object):
         self.ts_read: int = None
         self.ann_meta_d: Dict[str, Any] = None
 
-        self.load()
+        self.load(reload=True)
+        # #TODO: need to fix `needs_reload` for multi-index
+        # if needs_reload(self.path_tar):
+        #     self.load(reload=True)
+        # else:
+        #     self.load(reload=False)
 
-    def load(self, path_tar: str = None):
+    def load(self, path_tar: str = None, reload: bool = True):
         path_tar = path_tar or self.path_tar
         tic = time()
         print(f'Loading: {path_tar}')
         self.path_index_local, self.ids, self.ids_d, \
-            self.ts_read, self.ann_meta_d = \
-            load_via_tar(path_tar)
+            ts_read, self.ann_meta_d = \
+            load_via_tar(path_tar, reload)
+        self.ts_read = self.ts_read or ts_read
         print(f'...Done Loading! [{time() - tic} s]')
 
     def on_post(self, req, resp):
         # Check if our index is up to date (needs to be fast 99% of time)
         # and reload if out of date
         # Yes, we do this every time TODO: only do this on keep-warm calls
-        if needs_reload(self.path_tar):
-            print(f'Index [{self.path_tar}] needs to be reloaded'
-                  f'...doing that now...')
-            self.load()
+
+        ## TODO: need to fix `needs_reload`
+        # if needs_reload(self.path_tar):
+        #     print(f'Index [{self.path_tar}] needs to be reloaded'
+        #           f'...doing that now...')
+        #     self.load()
 
         try:
             payload_json_buf = req.bounded_stream
