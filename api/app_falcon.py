@@ -6,7 +6,6 @@ from typing import Dict, List, Tuple, Union, Any, Optional
 import boto3
 from botocore.exceptions import ClientError
 import s3fs
-import os
 import datetime
 import tarfile
 import struct
@@ -24,6 +23,7 @@ TIMESTAMP_LOCAL_KEY = 'timestamp.txt'
 DYNAMO_ID = 'variant_id'
 DYNAMO_KEY = 'repr'
 DTYPE_FMT = 'f'  # float32 struct
+SEED = 322
 
 PathType = Union[Path, str]
 
@@ -88,6 +88,7 @@ def load_index(path_index: PathType,
         metric=metric,
     )
     u.load(str(path_index))
+    u.set_seed(SEED)
     return u
 
 
