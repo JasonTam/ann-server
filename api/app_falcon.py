@@ -3,10 +3,13 @@ from annoy import AnnoyIndex
 import json
 from time import time
 from typing import Dict, List, Tuple, Union, Any
+import boto3
+from botocore.exceptions import ClientError
 import s3fs
 import os
 import datetime
 import tarfile
+import struct
 from pathlib import Path
 
 S3_URI_PREFIX = 's3://'
@@ -18,8 +21,12 @@ ANN_INDEX_KEY = 'index.ann'
 ANN_IDS_KEY = 'ids.txt'
 ANN_META_KEY = 'metadata.json'
 PATH_TIMESTAMP_LOCAL = '/tmp/timestamp.txt'
+DYNAMO_ID = 'variant_id'
+DYNAMO_KEY = 'repr'
 
 PathType = Union[Path, str]
+
+dynamodb = boto3.resource('dynamodb')
 
 
 def is_s3_path(path: PathType):
@@ -97,10 +104,27 @@ def load_ids(path_ids: PathType) -> Tuple[List[str], Dict[str, int]]:
     return ids, ids_d
 
 
+def get_dynamo_emb(table,
+                   d_fmt,
+                   variant_id,
+                   id_key=DYNAMO_ID, repr_key=DYNAMO_KEY):
+    try:
+        response = table.get_item(Key={id_key: variant_id})
+        item = response['Item']
+    except (ClientError, KeyError) as e:
+        return None
+    else:
+        emb = struct.unpack(d_fmt, item[repr_key].value)
+    return emb
+
+
 class ANNResource(object):
 
-    def __init__(self, path_tar: PathType):
+    def __init__(self, path_tar: PathType,
+                 ooi_table: dynamodb.Table = None,
+                 ):
         self.path_tar = path_tar
+        self.ooi_table = ooi_table
 
         # not multithread-safe to do this with multiple indexes per server
         # self.index: AnnoyIndex = None
@@ -134,19 +158,33 @@ class ANNResource(object):
         try:
             payload_json_buf = req.bounded_stream
             payload_json = json.load(payload_json_buf)
+            # TODO: parse and use `search_k`
             k = payload_json['k']
 
             ann_index = load_index(self.path_index_local, self.ann_meta_d)
 
             q_id = payload_json['id']
 
-            q_ind = self.ids_d[q_id]
-            neighbors = [self.ids[ind] for ind in
-                         ann_index.get_nns_by_item(q_ind, k + 1)]
+            if q_id in self.ids_d:
+                q_ind = self.ids_d[q_id]
+                neighbors = [self.ids[ind] for ind in
+                             ann_index.get_nns_by_item(q_ind, k + 1)]
+            elif self.ooi_table is not None:
+                # Need to look up the vector and query by vector
+                q_emb = get_dynamo_emb(
+                    self.ooi_table, self.ann_meta_d['n_dim'], q_id)
+                if q_emb is None:
+                    raise Exception(
+                        'Q is ooi and doesnt exist in the ooi dynamo table')
+                neighbors = [self.ids[ind] for ind in
+                             ann_index.get_nns_by_vector(q_emb, k + 1)]
+            else:
+                raise Exception('Q is ooi and no ooi dynamo table was set')
+
             if q_id in neighbors:
                 neighbors.remove(q_id)
 
-            resp.body = json.dumps(neighbors)
+            resp.body = json.dumps(neighbors[:k])
             resp.status = falcon.HTTP_200
         except Exception as e:
             resp.body = json.dumps(
@@ -214,16 +252,30 @@ def build_single_app(path_tar: PathType):
     return app
 
 
-def build_many_app(path_ann_dir: PathType):
+def build_many_app(path_ann_dir: PathType,
+                   ooi_table_name: str = None):
+    """
+
+    Args:
+        path_ann_dir: local or s3 remote path to tarball with
+            ANN index, ids, and metadata files
+        ooi_table_name: name of dynamo table to grab out-of-index
+            vectors from
+
+    Returns: ANN api app
+
+    """
     app = falcon.API()
     fs = s3fs.S3FileSystem()
     ann_keys = fs.ls(path_ann_dir)
-    print(f'{len(ann_keys)} ann indexes found')
+    print(f'{len(ann_keys)} ann indexes detected')
+
+    ooi_table = dynamodb.Table(ooi_table_name) if ooi_table_name else None
 
     app.req_options.auto_parse_form_urlencoded = True
     ann_name_l = []
     for path_tar in ann_keys:
-        ann = ANNResource(path_tar)
+        ann = ANNResource(path_tar, ooi_table)
         refresh = RefreshResource(ann)
         ann_health = ANNHealthcheckResource(ann)
 
