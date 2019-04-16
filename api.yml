@@ -53,9 +53,9 @@ paths:
             $ref: '#/definitions/query_payload'
       responses:
         "200":
-          description: batch of list of neighbors
+          description: list of neighbors
           schema:
-            $ref: '#/definitions/batch_neighbors'
+            $ref: '#/definitions/variant_ids'
 
   /ann/{indexName}/refresh:
     post:
@@ -80,15 +80,6 @@ definitions:
     items:
       $ref: '#/definitions/variant_id'
     example: [ "123", "456", "789"]
-  batch_neighbors:
-    type: array
-    items:
-      $ref: '#/definitions/variant_ids'
-    example: [
-      ["123", "1231", "1232", "1233", "1234"],
-      ["456", "4561", "4562", "4563", "4564"],
-      ["789", "7891", "7892", "7893", "7894"]
-    ]
 
 
   query_payload:
@@ -98,17 +89,17 @@ definitions:
         type: integer
         example: 5
       search_k:
-        description: number of nodes to inspect (leave as -1 if unsure)
+        description: (UNUSED) number of nodes to inspect (leave as -1 if unsure)
         type: integer
         example: -1
-      ids:
-        $ref: '#/definitions/variant_ids'
+      id:
+        $ref: '#/definitions/variant_id'
 
   ann_summary:
     properties:
       path_tar:
         type: string
-        example: 'mo-ml-dev/ann/C-HATS.tar.gz'
+        example: 'mo-ml-dev/ann/W-DRESSES.tar.gz'
       ann_meta:
         properties:
           vec_src:
@@ -122,14 +113,12 @@ definitions:
             example: 1024
           timestamp_utc:
             type: string
-            example: '2019-04-11T02:47:18.240980'
+            example: '2019-04-16T03:21:17.040380'
       ts_read:
         type: integer
-        example: 1555004178
+        example: '2019-04-16T14:40:39+00:00'
       n_ids:
         type: integer
-        example: 1007
+        example: 5906
       head5_ids:
-        type: array
-        items:
-          type: string
+        $ref: '#/definitions/variant_ids'
