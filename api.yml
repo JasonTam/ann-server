@@ -2,7 +2,7 @@ swagger: "2.0"
 info:
   version: 0.0.1
   title: Approximate Nearest Neighbor [ANN] Server
-host: 54.198.0.33:8000
+host: localhost:8000
 
 paths:
   /:
