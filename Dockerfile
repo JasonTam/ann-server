@@ -18,6 +18,7 @@ RUN apk add --no-cache --virtual .build-deps \
     )" \
     && apk add --virtual .rundeps $runDeps \
     && apk --purge del .build-deps
+RUN echo "UTC" >  /etc/timezone
 
 COPY . .
 
