@@ -1,17 +1,18 @@
 #!/bin/sh
 
-MODE=${1:-"many"}  # { "many" | "single" }
-PATH_ANN=${2:-"s3://mo-ml-dev/ann/"}
-OOI_TABLE=${3:-"img-reprs"}
-PATH_FALLBACK=${4:-"s3://mo-ml-dev/subcat_parent_map.json"}
+PATH_ANN=${1:-"s3://mo-ml-dev/ann/"}
+OOI_TABLE=${2:-"img-reprs"}
+PATH_FALLBACK=${3:-"s3://mo-ml-dev/subcat_parent_map.json"}
+CHECK_INTERVAL=${4:-3600}
 
 
-if [ ${MODE} = "many" ]
-then
-    APP_FN="api.app_falcon:build_many_app('$PATH_ANN','$OOI_TABLE','$PATH_FALLBACK')"
-else
-    APP_FN="api.app_falcon:build_single_app('$PATH_ANN')"
-fi
+APP_FN="api.app_falcon:build_many_app("\
+"'$PATH_ANN',"\
+"'$OOI_TABLE',"\
+"'$PATH_FALLBACK',"\
+"$CHECK_INTERVAL,"\
+")"
+
 
 gunicorn \
     --timeout 90 \
