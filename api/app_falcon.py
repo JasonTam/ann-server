@@ -12,6 +12,8 @@ import struct
 from pathlib import Path
 import logging
 
+logging.basicConfig(level=logging.INFO)
+
 S3_URI_PREFIX = 's3://'
 
 
