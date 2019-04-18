@@ -10,6 +10,7 @@ import datetime
 import tarfile
 import struct
 from pathlib import Path
+from apscheduler.schedulers.background import BackgroundScheduler
 import logging
 
 logging.basicConfig(level=logging.INFO)
@@ -169,6 +170,10 @@ class ANNResource(object):
                 tz=datetime.timezone.utc)
         return local_mtime
 
+    @property
+    def needs_reload(self):
+        return needs_reload(self.path_tar, self.ts_read_utc)
+
     def load(self, path_tar: str = None, reload: bool = True):
         path_tar = path_tar or self.path_tar
         tic = time()
@@ -177,6 +182,11 @@ class ANNResource(object):
             ts_read, self.ann_meta_d = \
             load_via_tar(path_tar, self.path_extract, reload)
         logging.info(f'...Done Loading! [{time() - tic} s]')
+
+    def maybe_reload(self):
+        if self.needs_reload:
+            logging.info(f'Reloading [{self.path_tar}] due to staleness')
+            self.load(reload=True)
 
     def nn_from_payload(self, payload: Dict):
         # TODO: parse and use `search_k`
@@ -218,15 +228,6 @@ class ANNResource(object):
         return neighbors[:k]
 
     def on_post(self, req, resp):
-        # Check if our index is up to date (needs to be fast 99% of time)
-        # and reload if out of date
-        # Yes, we do this every time TODO: only do this on keep-warm calls
-
-        if needs_reload(self.path_tar, self.ts_read_utc):
-            logging.info(f'Index [{self.path_tar}] needs to be reloaded'
-                         f'...doing that now...')
-            self.load()
-
         try:
             payload_json_buf = req.bounded_stream
             payload_json = json.load(payload_json_buf)
@@ -260,11 +261,28 @@ class RefreshResource(object):
 
     def on_post(self, req, resp):
         """
+        Forces a refresh on a specific index
         Note: reloading may take a while if index stored remotely
         Consider running async workers if so (ex. `gunicorn -k gevent`)
         """
 
         self.ann_resource.load()
+        resp.status = falcon.HTTP_200
+
+
+class MaybeRefreshAllResource(object):
+
+    def __init__(self, ann_resources: List[ANNResource]):
+        self.ann_resources = ann_resources
+
+    def on_post(self, req, resp):
+        """
+        Checks all indexes for freshness -- reloads them if stale
+        Note: reloading may take a while if index stored remotely
+        Consider running async workers if so (ex. `gunicorn -k gevent`)
+        """
+        for ann in self.ann_resources:
+            ann.maybe_reload()
         resp.status = falcon.HTTP_200
 
 
@@ -307,6 +325,7 @@ def build_single_app(path_tar: PathType):
 def build_many_app(path_ann_dir: PathType,
                    ooi_table_name: str = None,
                    path_fallback_map: PathType = None,
+                   check_reload_interval: int = 3600,
                    ):
     """
 
@@ -317,10 +336,14 @@ def build_many_app(path_ann_dir: PathType,
             vectors from
         path_fallback_map: path to mapping from ANN name
             to name of fallback ANN
+        check_reload_interval: if >0, indicates the number of seconds
+            between checking for stale indexes and reloading
 
     Returns: ANN api app
 
     """
+    scheduler = BackgroundScheduler()
+
     app = falcon.API()
     ann_keys = s3.ls(path_ann_dir)
     logging.info(f'{len(ann_keys)} ann indexes detected')
@@ -341,6 +364,12 @@ def build_many_app(path_ann_dir: PathType,
         app.add_route(f"/ann/{ann_name}/", ann_health)
 
         ann_d[ann_name] = ann
+        if check_reload_interval > 0:
+            scheduler.add_job(
+                func=ann.maybe_reload,
+                trigger='interval',
+                seconds=check_reload_interval)
+
     ann_name_l = [falcon.uri.encode(n) for n in ann_d.keys()]
 
     logging.info('***Done loading all indexes***')
@@ -357,5 +386,8 @@ def build_many_app(path_ann_dir: PathType,
 
     healthcheck = HealthcheckResource(ann_name_l)
     app.add_route('/', healthcheck)
+
+    if check_reload_interval > 0:
+        scheduler.start()
 
     return app
