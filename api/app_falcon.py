@@ -10,6 +10,7 @@ import datetime
 import tarfile
 import struct
 from pathlib import Path
+import logging
 
 S3_URI_PREFIX = 's3://'
 
@@ -169,11 +170,11 @@ class ANNResource(object):
     def load(self, path_tar: str = None, reload: bool = True):
         path_tar = path_tar or self.path_tar
         tic = time()
-        print(f'Loading: {path_tar}')
+        logging.info(f'Loading: {path_tar}')
         self.path_index_local, self.ids, self.ids_d, \
             ts_read, self.ann_meta_d = \
             load_via_tar(path_tar, self.path_extract, reload)
-        print(f'...Done Loading! [{time() - tic} s]')
+        logging.info(f'...Done Loading! [{time() - tic} s]')
 
     def nn_from_payload(self, payload: Dict):
         # TODO: parse and use `search_k`
@@ -220,8 +221,8 @@ class ANNResource(object):
         # Yes, we do this every time TODO: only do this on keep-warm calls
 
         if needs_reload(self.path_tar, self.ts_read_utc):
-            print(f'Index [{self.path_tar}] needs to be reloaded'
-                  f'...doing that now...')
+            logging.info(f'Index [{self.path_tar}] needs to be reloaded'
+                         f'...doing that now...')
             self.load()
 
         try:
@@ -320,7 +321,7 @@ def build_many_app(path_ann_dir: PathType,
     """
     app = falcon.API()
     ann_keys = s3.ls(path_ann_dir)
-    print(f'{len(ann_keys)} ann indexes detected')
+    logging.info(f'{len(ann_keys)} ann indexes detected')
 
     ooi_table = dynamodb.Table(ooi_table_name) if ooi_table_name else None
 
@@ -340,17 +341,17 @@ def build_many_app(path_ann_dir: PathType,
         ann_d[ann_name] = ann
     ann_name_l = [falcon.uri.encode(n) for n in ann_d.keys()]
 
-    print('***Done loading all indexes***')
+    logging.info('***Done loading all indexes***')
 
     if path_fallback_map:
         # Linking fallbacks
-        print('Linking fallback resources...')
+        logging.info('Linking fallback resources...')
         # TODO: should check that there are no loops in fallback map
         fallback_map = load_fallback_map(path_fallback_map)
         for child, parent in fallback_map.items():
             if child in ann_d:
                 ann_d[child].set_fallback(ann_d[parent])
-        print('... done linking fallbacks')
+        logging.info('... done linking fallbacks')
 
     healthcheck = HealthcheckResource(ann_name_l)
     app.add_route('/', healthcheck)
