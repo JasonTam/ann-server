@@ -14,6 +14,9 @@ FACTORS_KEY = 'factors'
 ID_KEY = 'id'
 N_TREES = 10
 PATH_DISK_SAVE = '/tmp/index.ann'
+IDS_NAME = 'ids.txt'
+INDEX_NAME = 'index.ann'
+META_NAME = 'metadata.json'
 
 fs = s3fs.S3FileSystem()
 open_fn = fs.open
@@ -39,17 +42,17 @@ def create_tarball(ids, meta_d):
     buf = BytesIO()
     with tarfile.open(fileobj=buf, mode='w:gz') as tar_buf:
         # Add index
-        tar_buf.add(PATH_DISK_SAVE, arcname='index.ann')
+        tar_buf.add(PATH_DISK_SAVE, arcname=INDEX_NAME)
 
-        # Add ids  TODO: will be lmdb
-        info = tarfile.TarInfo(name='ids.txt')
+        # Add ids  TODO: will be lmdb in the future(?)
+        info = tarfile.TarInfo(name=IDS_NAME)
         ids_bytes = '\n'.join(map(str, ids)).encode('utf-8')
         ids_buf = BytesIO(ids_bytes)
         info.size = len(ids_bytes)
         tar_buf.addfile(tarinfo=info, fileobj=ids_buf)
 
         # Add Metadata
-        info = tarfile.TarInfo(name='metadata.json')
+        info = tarfile.TarInfo(name=META_NAME)
         meta_bytes = json.dumps(meta_d).encode('utf-8')
         meta_buf = BytesIO(meta_bytes)
         info.size = len(meta_bytes)
