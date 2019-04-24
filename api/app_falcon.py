@@ -9,6 +9,7 @@ import s3fs
 import datetime
 import tarfile
 import struct
+import os
 from pathlib import Path
 from apscheduler.schedulers.background import BackgroundScheduler
 import logging
@@ -345,7 +346,7 @@ def build_many_app(path_ann_dir: PathType,
     scheduler = BackgroundScheduler()
 
     app = falcon.API()
-    ann_keys = s3.ls(path_ann_dir)
+    ann_keys = s3.glob(os.path.join(path_ann_dir, '*.tar*'))
     logging.info(f'{len(ann_keys)} ann indexes detected')
 
     ooi_table = dynamodb.Table(ooi_table_name) if ooi_table_name else None
