@@ -36,9 +36,11 @@ class ANNResource(object):
 
     def __init__(self, path_tar: PathType,
                  ooi_table: dynamodb.Table = None,
+                 name: str = None,
                  ):
         self.path_tar = path_tar
         self.ooi_table = ooi_table
+        self.name = name
 
         # not multithread-safe to do this with multiple indexes per server
         # self.index: AnnoyIndex = None

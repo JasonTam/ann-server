@@ -67,11 +67,12 @@ def build_many_app(path_ann_dir: PathType,
     app.req_options.auto_parse_form_urlencoded = True
     ann_d: Dict[str, ANNResource] = {}
     for path_tar in ann_keys:
-        ann_r = ANNResource(path_tar, ooi_table)
+        ann_name = Path(path_tar).stem.split('.')[0]
+
+        ann_r = ANNResource(path_tar, ooi_table=ooi_table, name=ann_name)
         refresh_r = RefreshResource(ann_r)
         ann_health_r = ANNHealthcheckResource(ann_r)
 
-        ann_name = Path(path_tar).stem.split('.')[0]
         # automatically handles url encoding
         app.add_route(f"/ann/{ann_name}/query", ann_r)
         app.add_route(f"/ann/{ann_name}/refresh", refresh_r)
