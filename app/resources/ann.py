@@ -90,16 +90,17 @@ class ANNResource(object):
             logging.info(f'Reloading [{self.path_tar}] due to staleness')
             self.load(reload=True)
 
-    def nn_from_payload(self, payload: Dict):
-        # TODO: parse and use `search_k`
-        k = payload['k']
+    def nn_from_emb(self, q_emb, k: int, ann_index=None):
+        ann_index = ann_index or self.ann_index
+        neighbors = [self.ids[ind] for ind in
+                     ann_index.get_nns_by_vector(q_emb, k)]
+        return neighbors
 
-        ann_index = self.ann_index
-
-        q_id = payload['id']
-
+    def nn_from_id(self, q_id: str, k: int, ann_index=None):
+        ann_index = ann_index or self.ann_index
         if q_id in self.ids_d:
             q_ind = self.ids_d[q_id]
+            # Note: if id in index, query 1 more than you need and discard 1st
             neighbors = [self.ids[ind] for ind in
                          ann_index.get_nns_by_item(q_ind, k + 1)]
         elif self.ooi_table is not None:
@@ -109,19 +110,33 @@ class ANNResource(object):
             if q_emb is None:
                 raise Exception(
                     'Q is ooi and doesnt exist in the ooi dynamo table')
-            neighbors = [self.ids[ind] for ind in
-                         ann_index.get_nns_by_vector(q_emb, k + 1)]
+            neighbors = self.nn_from_emb(q_emb, k)
         else:
             # TODO: there's a chance Q is in the fallback parent index
-            # TODO: depending on how he indexes were created
+            # TODO: depending on how the indexes were created
             raise Exception('Q is ooi and no ooi dynamo table was set')
 
         if q_id in neighbors:
             neighbors.remove(q_id)
 
+        return neighbors
+
+    def nn_from_payload(self, payload: Dict):
+        # TODO: parse and use `search_k`
+        k = payload['k']
+
+        if 'id' in payload:
+            q_id = payload['id']
+            neighbors = self.nn_from_id(q_id, k)
+        elif 'emb' in payload:
+            q_emb = payload['emb']
+            neighbors = self.nn_from_emb(q_emb, k)
+        else:
+            raise Exception('Payload must contain `id` or `emb`')
+
         # Fallback lookup if not enough neighbors
         # TODO: there are some duplicated overheads by calling this
-        if self.fallback_parent is not None:
+        if (len(neighbors) < k) and (self.fallback_parent is not None):
             neighbors_fallback = self.fallback_parent.nn_from_payload(
                 {**payload, **{'k': k - len(neighbors)}}
             )
