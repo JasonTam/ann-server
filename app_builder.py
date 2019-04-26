@@ -23,15 +23,15 @@ dynamodb = boto3.resource('dynamodb')
 def build_single_app(path_tar: PathType):
     app = falcon.API()
 
-    ann = ANNResource(path_tar)
-    refresh = RefreshResource(ann)
-    healthcheck = HealthcheckResource(ann)
+    ann_r = ANNResource(path_tar)
+    refresh_r = RefreshResource(ann_r)
+    healthcheck_r = HealthcheckResource(ann_r)
 
     # handle all requests to the '/ann' URL path
     app.req_options.auto_parse_form_urlencoded = True
-    app.add_route('/query', ann)
-    app.add_route('/refresh', refresh)
-    app.add_route('/', healthcheck)
+    app.add_route('/query', ann_r)
+    app.add_route('/refresh', refresh_r)
+    app.add_route('/', healthcheck_r)
 
     return app
 
@@ -67,20 +67,20 @@ def build_many_app(path_ann_dir: PathType,
     app.req_options.auto_parse_form_urlencoded = True
     ann_d: Dict[str, ANNResource] = {}
     for path_tar in ann_keys:
-        ann = ANNResource(path_tar, ooi_table)
-        refresh = RefreshResource(ann)
-        ann_health = ANNHealthcheckResource(ann)
+        ann_r = ANNResource(path_tar, ooi_table)
+        refresh_r = RefreshResource(ann_r)
+        ann_health_r = ANNHealthcheckResource(ann_r)
 
         ann_name = Path(path_tar).stem.split('.')[0]
         # automatically handles url encoding
-        app.add_route(f"/ann/{ann_name}/query", ann)
-        app.add_route(f"/ann/{ann_name}/refresh", refresh)
-        app.add_route(f"/ann/{ann_name}/", ann_health)
+        app.add_route(f"/ann/{ann_name}/query", ann_r)
+        app.add_route(f"/ann/{ann_name}/refresh", refresh_r)
+        app.add_route(f"/ann/{ann_name}/", ann_health_r)
 
-        ann_d[ann_name] = ann
+        ann_d[ann_name] = ann_r
         if check_reload_interval > 0:
             scheduler.add_job(
-                func=ann.maybe_reload,
+                func=ann_r.maybe_reload,
                 trigger='interval',
                 seconds=check_reload_interval)
 
@@ -98,8 +98,8 @@ def build_many_app(path_ann_dir: PathType,
                 ann_d[child].set_fallback(ann_d[parent])
         logging.info('... done linking fallbacks')
 
-    healthcheck = HealthcheckResource(ann_name_l)
-    app.add_route('/', healthcheck)
+    healthcheck_r = HealthcheckResource(ann_name_l)
+    app.add_route('/', healthcheck_r)
 
     if check_reload_interval > 0:
         scheduler.start()
