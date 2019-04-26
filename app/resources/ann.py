@@ -72,6 +72,10 @@ class ANNResource(object):
     def needs_reload(self):
         return needs_reload(self.path_tar, self.ts_read_utc)
 
+    @property
+    def ann_index(self) -> AnnoyIndex:
+        return load_index(self.path_index_local, self.ann_meta_d)
+
     def load(self, path_tar: str = None, reload: bool = True):
         path_tar = path_tar or self.path_tar
         tic = time()
@@ -90,8 +94,7 @@ class ANNResource(object):
         # TODO: parse and use `search_k`
         k = payload['k']
 
-        ann_index: AnnoyIndex = load_index(
-            self.path_index_local, self.ann_meta_d)
+        ann_index = self.ann_index
 
         q_id = payload['id']
 
@@ -126,6 +129,20 @@ class ANNResource(object):
 
         return neighbors[:k]
 
+    def get_vector(self, q_id):
+        if q_id in self.ids_d:
+            q_ind = self.ids_d[q_id]
+            ann_index = self.ann_index
+            q_emb = ann_index.get_item_vector(q_ind)
+        elif self.ooi_table is not None:
+            # Need to look up the vector and query by vector
+            q_emb = get_dynamo_emb(
+                self.ooi_table, self.ann_meta_d['n_dim'] * DTYPE_FMT, q_id)
+        else:
+            return None
+
+        return q_emb
+
     def on_post(self, req, resp):
         try:
             payload_json_buf = req.bounded_stream
@@ -139,6 +156,24 @@ class ANNResource(object):
             resp.body = json.dumps(
                 {'Error': f'An internal server error has occurred:\n{e}'})
             resp.status = falcon.HTTP_500
+
+    def on_get(self, req, resp):
+        """Retrieve vector for given id
+        If the id exists in index, grab from index.
+        If not (item is not active or something), try grabbing from dynamo.
+        TODO:
+        Finally, if desired, calculate the cold embedding somehow
+        """
+
+        q_id = req.params['id']
+
+        q_emb = self.get_vector(q_id)
+
+        if q_emb is None:
+            resp.status = falcon.HTTP_200
+        else:
+            resp.status = falcon.HTTP_200
+            resp.body = json.dumps(q_emb)
 
     def set_fallback(self, fallback_parent: 'ANNResource'):
         self.fallback_parent = fallback_parent
