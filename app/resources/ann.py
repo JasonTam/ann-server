@@ -90,19 +90,35 @@ class ANNResource(object):
             logging.info(f'Reloading [{self.path_tar}] due to staleness')
             self.load(reload=True)
 
-    def nn_from_emb(self, q_emb, k: int, ann_index=None):
-        ann_index = ann_index or self.ann_index
-        neighbors = [self.ids[ind] for ind in
-                     ann_index.get_nns_by_vector(q_emb, k)]
+    def ids_maybe_dists(self, ann_out, incl_dist):
+        """Convenience fn for zipping weights if desired"""
+        if incl_dist:
+            inds, dists = ann_out
+            ids = [self.ids[ind] for ind in inds]
+            neighbors = list(zip(ids, dists))
+        else:
+            inds = ann_out
+            ids = [self.ids[ind] for ind in inds]
+            neighbors = ids
         return neighbors
 
-    def nn_from_id(self, q_id: str, k: int, ann_index=None):
+    def nn_from_emb(self, q_emb, k: int, ann_index=None, incl_dist=False):
+        ann_index = ann_index or self.ann_index
+        ann_out = ann_index.get_nns_by_vector(
+            q_emb, k, include_distances=incl_dist)
+        neighbors = self.ids_maybe_dists(ann_out, incl_dist)
+        return neighbors
+
+    def nn_from_id(self, q_id: str, k: int, ann_index=None, incl_dist=False):
         ann_index = ann_index or self.ann_index
         if q_id in self.ids_d:
             q_ind = self.ids_d[q_id]
             # Note: if id in index, query 1 more than you need and discard 1st
-            neighbors = [self.ids[ind] for ind in
-                         ann_index.get_nns_by_item(q_ind, k + 1)]
+
+            ann_out = ann_index.get_nns_by_item(
+                q_ind, k + 1, include_distances=incl_dist)
+            neighbors = self.ids_maybe_dists(ann_out, incl_dist)
+
         elif self.ooi_table is not None:
             # Need to look up the vector and query by vector
             q_emb = get_dynamo_emb(
@@ -110,27 +126,31 @@ class ANNResource(object):
             if q_emb is None:
                 raise Exception(
                     'Q is ooi and doesnt exist in the ooi dynamo table')
-            neighbors = self.nn_from_emb(q_emb, k)
+            neighbors = self.nn_from_emb(q_emb, k, ann_index=ann_index)
         else:
             # TODO: there's a chance Q is in the fallback parent index
             # TODO: depending on how the indexes were created
             raise Exception('Q is ooi and no ooi dynamo table was set')
 
-        if q_id in neighbors:
-            neighbors.remove(q_id)
+        if incl_dist:
+            neighbors = [(n_id, d) for n_id, d in neighbors if n_id != q_id]
+        else:
+            if q_id in neighbors:
+                neighbors.remove(q_id)
 
         return neighbors
 
     def nn_from_payload(self, payload: Dict):
         # TODO: parse and use `search_k`
         k = payload['k']
+        incl_dists = payload.get('incl_dist') or False
 
         if 'id' in payload:
             q_id = payload['id']
-            neighbors = self.nn_from_id(q_id, k)
+            neighbors = self.nn_from_id(q_id, k, incl_dist=incl_dists)
         elif 'emb' in payload:
             q_emb = payload['emb']
-            neighbors = self.nn_from_emb(q_emb, k)
+            neighbors = self.nn_from_emb(q_emb, k, incl_dist=incl_dists)
         else:
             raise Exception('Payload must contain `id` or `emb`')
 
