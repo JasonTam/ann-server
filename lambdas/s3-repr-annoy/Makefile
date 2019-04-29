@@ -1,3 +1,5 @@
+# Must be built with Python3.6
+# because we clone cffi for cython36
 
 FN_AWS_NAME='avro-repr-annoy'
 FN_FILE_NAME='lambda_function.py'
