@@ -1,0 +1,125 @@
+swagger: "2.0"
+info:
+  version: 0.0.1
+  title: Approximate Nearest Neighbor [ANN] Server
+host: localhost:8000
+
+paths:
+  /:
+    get:
+      summary: Healthcheck for service
+      responses:
+        "200":
+          description: An array of loaded ANN indexes (Healthcheck)
+          schema:
+            type: array
+            items:
+              type: string
+            example: ["W-DRESSES","W-HATS","M-OUTERWEAR"]
+  /ann/{indexName}:
+    get:
+      summary: Healthcheck for specific ANN index
+      operationId: showAnnByName
+      parameters:
+        - name: indexName
+          in: path
+          required: true
+          description: The name of the ANN index
+          type: string
+      responses:
+        "200":
+          description: ANN Metadata (Healthcheck)
+          schema:
+            $ref: '#/definitions/ann_summary'
+
+  /ann/{indexName}/query:
+    post:
+      summary: Query the ANN index for neighbors
+      operationId: queryAnn
+      consumes:
+        - application/json
+      produces:
+        - application/json
+      parameters:
+        - name: indexName
+          in: path
+          required: true
+          description: The name of the ANN index
+          type: string
+        - name: idsPayload
+          in: body
+          description: Query payload
+          schema:
+            $ref: '#/definitions/query_payload'
+      responses:
+        "200":
+          description: list of neighbors
+          schema:
+            $ref: '#/definitions/variant_ids'
+
+  /ann/{indexName}/refresh:
+    post:
+      summary: Reload the particular ANN index (may take some time)
+      operationId: reloadAnn
+      parameters:
+        - name: indexName
+          in: path
+          required: true
+          description: The name of the ANN index
+          type: string
+      responses:
+        "200":
+          description: Index successfully reloaded
+
+definitions:
+  variant_id:
+    type: string
+    example: '123'
+  variant_ids:
+    type: array
+    items:
+      $ref: '#/definitions/variant_id'
+    example: [ "123", "456", "789"]
+
+
+  query_payload:
+    required: ['id', 'k']
+    properties:
+      id:
+        $ref: '#/definitions/variant_id'
+      k:
+        description: number of neighbors to get
+        type: integer
+        example: 5
+      search_k:
+        description: (UNUSED) number of nodes to inspect (leave as -1 if unsure)
+        type: integer
+        example: -1
+
+  ann_summary:
+    properties:
+      path_tar:
+        type: string
+        example: 'mo-ml-dev/ann/W-DRESSES.tar.gz'
+      ann_meta:
+        properties:
+          vec_src:
+            type: string
+            example: 'dynamoDB:img-reprs'
+          metric:
+            type: string
+            example: 'angular'
+          n_dim:
+            type: integer
+            example: 1024
+          timestamp_utc:
+            type: string
+            example: '2019-04-16T03:21:17.040380'
+      ts_read:
+        type: integer
+        example: '2019-04-16T14:40:39+00:00'
+      n_ids:
+        type: integer
+        example: 5906
+      head5_ids:
+        $ref: '#/definitions/variant_ids'
