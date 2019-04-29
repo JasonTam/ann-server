@@ -88,7 +88,7 @@ definitions:
       id:
         $ref: '#/definitions/variant_id'
       k:
-        description: number of neighbors to get (note- the first neighbor will be the same as the query, so ask for 1 more than you actually want)
+        description: number of neighbors to get
         type: integer
         example: 5
       search_k:
