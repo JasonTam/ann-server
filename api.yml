@@ -15,7 +15,7 @@ paths:
             type: array
             items:
               type: string
-            example: ["W-DRESSES","W-HATS","M-OUTERWEAR"]
+            example: ["INDEX-0","INDEX-1","INDEX-2"]
   /ann/{indexName}:
     get:
       summary: Healthcheck for specific ANN index
@@ -55,7 +55,7 @@ paths:
         "200":
           description: list of neighbors
           schema:
-            $ref: '#/definitions/variant_ids'
+            $ref: '#/definitions/entity_ids'
 
   /ann/{indexName}/refresh:
     post:
@@ -72,13 +72,13 @@ paths:
           description: Index successfully reloaded
 
 definitions:
-  variant_id:
+  entity_id:
     type: string
     example: '123'
-  variant_ids:
+  entity_ids:
     type: array
     items:
-      $ref: '#/definitions/variant_id'
+      $ref: '#/definitions/entity_id'
     example: [ "123", "456", "789"]
 
 
@@ -86,7 +86,7 @@ definitions:
     required: ['id', 'k']
     properties:
       id:
-        $ref: '#/definitions/variant_id'
+        $ref: '#/definitions/entity_id'
       k:
         description: number of neighbors to get
         type: integer
@@ -100,12 +100,12 @@ definitions:
     properties:
       path_tar:
         type: string
-        example: 'mo-ml-dev/ann/W-DRESSES.tar.gz'
+        example: 'my-bucket/ann/INDEX-0.tar.gz'
       ann_meta:
         properties:
           vec_src:
             type: string
-            example: 'dynamoDB:img-reprs'
+            example: 'dynamoDB:repr-table'
           metric:
             type: string
             example: 'angular'
@@ -122,4 +122,4 @@ definitions:
         type: integer
         example: 5906
       head5_ids:
-        $ref: '#/definitions/variant_ids'
+        $ref: '#/definitions/entity_ids'

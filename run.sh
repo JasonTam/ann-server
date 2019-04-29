@@ -1,8 +1,10 @@
 #!/bin/sh
 
-PATH_ANN=${1:-"s3://mo-ml-dev/ann/"}
+BUCKET=my-bucket
+
+PATH_ANN=${1:-"s3://${BUCKET}/ann/"}
 OOI_TABLE=${2:-"img-reprs"}
-PATH_FALLBACK=${3:-"s3://mo-ml-dev/subcat_parent_map.json"}
+PATH_FALLBACK=${3:-"s3://${BUCKET}/subcat_parent_map.json"}
 CHECK_INTERVAL=${4:-3600}
 
 
