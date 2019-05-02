@@ -6,7 +6,10 @@ docker_local_server_args := \
 
 
 build:
-	 docker build -t ann-serve .
+	 docker build -t ann-serve:latest .
 
 run-local:
-	docker run -it $(docker_local_server_args) ann-serve
+	docker run -it $(docker_local_server_args) ann-serve:latest
+
+publish:
+    docker push 2jason/ann-serve:latest

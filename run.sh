@@ -3,8 +3,8 @@
 BUCKET=my-bucket
 
 PATH_ANN=${1:-"s3://${BUCKET}/ann/"}
-OOI_TABLE=${2:-"img-reprs"}
-PATH_FALLBACK=${3:-"s3://${BUCKET}/subcat_parent_map.json"}
+OOI_TABLE=${2:-""}
+PATH_FALLBACK=${3:-""}
 CHECK_INTERVAL=${4:-3600}
 
 
