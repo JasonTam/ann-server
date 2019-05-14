@@ -7,7 +7,7 @@ import boto3
 import s3fs
 import datetime
 from pathlib import Path
-from app.io import needs_reload, load_via_tar, load_index, get_dynamo_emb
+from ..io import needs_reload, load_via_tar, load_index, get_dynamo_emb
 import logging
 
 logging.basicConfig(level=logging.INFO)

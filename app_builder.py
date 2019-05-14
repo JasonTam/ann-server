@@ -5,9 +5,9 @@ import s3fs
 import os
 from pathlib import Path
 from apscheduler.schedulers.background import BackgroundScheduler
-from app.resources import *
-from app.io import load_fallback_map
 import logging
+from .app.resources import *
+from .app.io import load_fallback_map
 
 logging.basicConfig(level=logging.INFO)
 

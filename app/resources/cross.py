@@ -1,5 +1,5 @@
 import falcon
-from app.resources.ann import ANNResource
+from .ann import ANNResource
 import json
 from typing import List, Dict
 
