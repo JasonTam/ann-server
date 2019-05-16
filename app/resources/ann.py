@@ -35,11 +35,18 @@ dynamodb = boto3.resource('dynamodb')
 class ANNResource(object):
 
     def __init__(self, path_tar: PathType,
-                 ooi_table: dynamodb.Table = None,
+                 ooi_dynamo_table: dynamodb.Table = None,
                  name: str = None,
                  ):
+        """
+
+        Args:
+            path_tar: path to tar file with ann index and metadata
+            ooi_dynamo_table: dynamo table for out of index lookup
+            name:
+        """
         self.path_tar = path_tar
-        self.ooi_table = ooi_table
+        self.ooi_dynamo_table = ooi_dynamo_table
         self.name = name
 
         # not multithread-safe to do this with multiple indexes per server
@@ -50,6 +57,7 @@ class ANNResource(object):
         self.ids_d: Dict[Any, int] = None
         self.ann_meta_d: Dict[str, Any] = None
         self.fallback_parent: 'ANNResource' = None
+        self.ooi_ann: 'ANNResource' = None
 
         # There is a chance that the ANN is already downloaded in tmp
         self.load(reload=needs_reload(self.path_tar, self.ts_read_utc))
@@ -121,13 +129,21 @@ class ANNResource(object):
                 q_ind, k + 1, include_distances=incl_dist)
             neighbors = self.ids_maybe_dists(ann_out, incl_dist)
 
-        elif self.ooi_table is not None:
+        elif self.ooi_dynamo_table is not None:
             # Need to look up the vector and query by vector
             q_emb = get_dynamo_emb(
-                self.ooi_table, self.ann_meta_d['n_dim'] * DTYPE_FMT, q_id)
+                self.ooi_dynamo_table,
+                self.ann_meta_d['n_dim'] * DTYPE_FMT, q_id)
             if q_emb is None:
                 raise Exception(
                     'Q is ooi and doesnt exist in the ooi dynamo table')
+            neighbors = self.nn_from_emb(q_emb, k, ann_index=ann_index)
+        elif self.ooi_ann is not None:
+            # Need to look up the vector and query by vector
+            q_emb = self.ooi_ann.get_vector(q_id)
+            if q_emb is None:
+                raise Exception(
+                    'Q is ooi and doesnt exist in the ooi ann')
             neighbors = self.nn_from_emb(q_emb, k, ann_index=ann_index)
         else:
             # TODO: there's a chance Q is in the fallback parent index
@@ -171,10 +187,12 @@ class ANNResource(object):
             q_ind = self.ids_d[q_id]
             ann_index = self.ann_index
             q_emb = ann_index.get_item_vector(q_ind)
-        elif self.ooi_table is not None:
-            # Need to look up the vector and query by vector
+        elif self.ooi_dynamo_table is not None:
             q_emb = get_dynamo_emb(
-                self.ooi_table, self.ann_meta_d['n_dim'] * DTYPE_FMT, q_id)
+                self.ooi_dynamo_table,
+                self.ann_meta_d['n_dim'] * DTYPE_FMT, q_id)
+        elif self.ooi_ann is not None:
+            q_emb = self.ooi_ann.get_vector(q_id)
         else:
             return None
 

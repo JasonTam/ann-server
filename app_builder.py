@@ -62,14 +62,26 @@ def build_many_app(path_ann_dir: PathType,
     ann_keys = s3.glob(os.path.join(path_ann_dir, '*.tar*'))
     logging.info(f'{len(ann_keys)} ann indexes detected')
 
-    ooi_table = dynamodb.Table(ooi_table_name) if ooi_table_name else None
+    ooi_dynamo_table = None
+    ooi_ann_name = None
+    if ooi_table_name:
+        dynamo_tables = {t.name for t in dynamodb.tables.all()}
+        if ooi_table_name in dynamo_tables:
+            logging.info(f'Using {ooi_table_name} dynamo table for OOI lookup')
+            ooi_dynamo_table = dynamodb.Table(ooi_table_name)
+        else:
+            logging.info(f'Using {ooi_table_name} ANN (if exists) '
+                         f'for OOI lookup ')
+            ooi_ann_name = ooi_table_name
 
     app.req_options.auto_parse_form_urlencoded = True
     ann_d: Dict[str, ANNResource] = {}
     for path_tar in ann_keys:
         ann_name = Path(path_tar).stem.split('.')[0]
 
-        ann_r = ANNResource(path_tar, ooi_table=ooi_table, name=ann_name)
+        ann_r = ANNResource(path_tar,
+                            ooi_dynamo_table=ooi_dynamo_table,
+                            name=ann_name)
         refresh_r = RefreshResource(ann_r)
         ann_health_r = ANNHealthcheckResource(ann_r)
 
@@ -88,6 +100,15 @@ def build_many_app(path_ann_dir: PathType,
     ann_name_l = [falcon.uri.encode(n) for n in ann_d.keys()]
 
     logging.info('***Done loading all indexes***')
+
+    if ooi_ann_name:
+        # Linking OOI ann
+        # (if the query is OOI for an ann, look at this other ann for the emb)
+        logging.info('Linking ooi_ann to resources...')
+        for name, ann_r in ann_d.items():
+            if name != ooi_ann_name:
+                ann_r.ooi_ann = ann_d[ooi_ann_name]
+        logging.info('... done linking ooi_ann_name')
 
     if path_fallback_map:
         # Linking fallbacks
