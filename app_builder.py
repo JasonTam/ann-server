@@ -6,8 +6,12 @@ import os
 from pathlib import Path
 from apscheduler.schedulers.background import BackgroundScheduler
 import logging
-from .app.resources import *
-from .app.io import load_fallback_map
+try:
+    from .app.resources import *
+    from .app.io import load_fallback_map
+except ImportError:
+    from app.resources import *
+    from app.io import load_fallback_map
 
 logging.basicConfig(level=logging.INFO)
 
