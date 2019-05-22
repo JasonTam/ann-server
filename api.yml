@@ -16,6 +16,15 @@ paths:
             items:
               type: string
             example: ["INDEX-0","INDEX-1","INDEX-2"]
+  /tmp:
+    get:
+      summary: Get size of /tmp
+      responses:
+        "200":
+          description: Size of /tmp in megabytes
+          schema:
+            type: int
+            example: 256
   /ann/{indexName}:
     get:
       summary: Healthcheck for specific ANN index

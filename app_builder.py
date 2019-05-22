@@ -126,6 +126,9 @@ def build_many_app(path_ann_dir: PathType,
     healthcheck_r = HealthcheckResource(ann_name_l)
     app.add_route('/', healthcheck_r)
 
+    tmpspace_r = TmpSpaceResource()
+    app.add_route('/tmp', tmpspace_r)
+
     if check_reload_interval > 0:
         scheduler.start()
 
