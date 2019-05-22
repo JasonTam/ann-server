@@ -44,5 +44,7 @@ class TmpSpaceResource(object):
                         pass
             return total_size
 
-        resp.body = int(get_size('/tmp') / 1e6)
+        size_mb = int(get_size('/tmp') / 1e6)
+
+        resp.body = json.dumps(size_mb)
         resp.status = falcon.HTTP_200
