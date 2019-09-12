@@ -25,6 +25,13 @@ paths:
           schema:
             type: int
             example: 256
+  /sleep:
+    get:
+      summary: Sleep for `duration` milliseconds
+      parameters:
+        - name: duration
+          description: duration in milliseconds to sleep
+          type: string
   /ann/{indexName}:
     get:
       summary: Healthcheck for specific ANN index
@@ -66,6 +73,42 @@ paths:
           schema:
             $ref: '#/definitions/entity_ids'
 
+  /crossq:
+    get:
+      summary: Query the ANN with an entry from another ANN index
+      operationId: crossQueryAnn
+      produces:
+        - application/json
+      parameters:
+        - name: q_name
+          required: true
+          description: The name of the ANN index to grab query *from*
+          type: string
+        - name: q_id
+          required: true
+          description: Name of the particular record to use as the query
+            (must be a member of the `q_name` index)
+          type: string
+        - name: catalog_name
+          required: true
+          description: The name of the ANN index to apply query *to*
+          type: string
+        - name: k
+          required: true
+          description: number of neighbors to get
+          type: int
+        - name: incl_dist
+          required: true
+          description: if true, include associated distances
+          type: bool
+      responses:
+        "200":
+          description: list of neighbors
+          schema:
+            oneOf:
+              - $ref: '#/definitions/entity_ids'
+              - $ref: '#/definitions/entity_ids_w_dists'
+
   /ann/{indexName}/refresh:
     post:
       summary: Reload the particular ANN index (may take some time)
@@ -84,11 +127,19 @@ definitions:
   entity_id:
     type: string
     example: '123'
+  entity_id_w_dist:
+    type: array
+    example: ["123", 0.9]
   entity_ids:
     type: array
     items:
       $ref: '#/definitions/entity_id'
     example: [ "123", "456", "789"]
+  entity_ids_w_dists:
+    type: array
+    items:
+      $ref: '#/definitions/entity_id_w_dist'
+    example: [ ["123", 0.9], ["456", 0.8], ["789", 0.1]]
 
 
   query_payload:

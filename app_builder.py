@@ -133,6 +133,9 @@ def build_many_app(path_ann_dir: PathType,
     tmpspace_r = TmpSpaceResource()
     app.add_route('/tmp', tmpspace_r)
 
+    sleep_r = SleepResource()
+    app.add_route('/sleep', sleep_r)
+
     if check_reload_interval > 0:
         scheduler.start()
 

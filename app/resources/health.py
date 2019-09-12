@@ -2,6 +2,7 @@ import falcon
 from .ann import ANNResource
 import json
 import os
+from time import sleep
 
 
 class ANNHealthcheckResource(object):
@@ -47,4 +48,14 @@ class TmpSpaceResource(object):
         size_mb = int(get_size('/tmp') / 1e6)
 
         resp.body = json.dumps(size_mb)
+        resp.status = falcon.HTTP_200
+
+
+class SleepResource(object):
+
+    def on_get(self, req, resp):
+        """param `duration` in milliseconds """
+
+        duration = req.params.get('duration') or 100
+        sleep(float(duration) / 1000.)
         resp.status = falcon.HTTP_200
