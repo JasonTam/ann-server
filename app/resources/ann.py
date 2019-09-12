@@ -100,12 +100,13 @@ class ANNResource(object):
             logging.info(f'Reloading [{self.path_tar}] due to staleness')
             self.load(reload=True)
 
-    def ids_maybe_dists(self, ann_out, incl_dist):
+    def ids_maybe_dists(self, ann_out, incl_dist
+                        ) -> Union[List[Any], List[Dict[Any, float]]]:
         """Convenience fn for zipping weights if desired"""
         if incl_dist:
             inds, dists = ann_out
             ids = [self.ids[ind] for ind in inds]
-            neighbors = list(zip(ids, dists))
+            neighbors = [{i: d} for i, d in zip(ids, dists)]
         else:
             inds = ann_out
             ids = [self.ids[ind] for ind in inds]
