@@ -130,6 +130,9 @@ def build_many_app(path_ann_dir: PathType,
     healthcheck_r = HealthcheckResource(ann_name_l)
     app.add_route('/', healthcheck_r)
 
+    maybe_refresh_all_r = MaybeRefreshAllResource(list(ann_d.values()))
+    app.add_route('/refresh-all', maybe_refresh_all_r)
+
     tmpspace_r = TmpSpaceResource()
     app.add_route('/tmp', tmpspace_r)
 
