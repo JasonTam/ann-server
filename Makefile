@@ -12,7 +12,7 @@ endif
 
 
 build:
-	docker build -t ann-serve:latest .
+	docker build -t ann-serve:$(TAG) .
 
 run-local:
 	docker run -it $(docker_local_server_args) ann-serve:latest
