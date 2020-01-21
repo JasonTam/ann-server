@@ -4,6 +4,12 @@ docker_local_server_args := \
 	--volume ~/.aws:/root/.aws \
 	--publish 8000:8000 \
 
+GIT_HASH = $(shell git rev-parse --short HEAD)
+
+ifndef TAG  # if kwarg `TAG` not specified
+    TAG = $(GIT_HASH)
+endif
+
 
 NAME = ann-serve
 PORT_CONTAINER = 8000
