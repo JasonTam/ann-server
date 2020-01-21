@@ -21,12 +21,14 @@ class CrossANNResource(object):
         k = int(req.params['k'])
         incl_dist = bool(req.params.get('incl_dist')) or False
 
-        q_emb = self.ann_resources_d[q_name].get_vector(q_id)
-        neighbors = self.ann_resources_d[c_name].nn_from_emb(
-                q_emb, k, incl_dist=incl_dist)
+        neighbors = []
+        try:
+            q_emb = self.ann_resources_d[q_name].get_vector(q_id)
+            neighbors = self.ann_resources_d[c_name].nn_from_emb(
+                    q_emb, k, incl_dist=incl_dist)
+        except ValueError:
+            resp.status = falcon.HTTP_200
+            resp.body = json.dumps([])
 
-        if neighbors is None:
-            resp.status = falcon.HTTP_200
-        else:
-            resp.status = falcon.HTTP_200
-            resp.body = json.dumps(neighbors)
+        resp.status = falcon.HTTP_200
+        resp.body = json.dumps(neighbors)
