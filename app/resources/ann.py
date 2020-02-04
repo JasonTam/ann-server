@@ -64,7 +64,7 @@ class ANNResource(object):
 
     @property
     def path_extract(self) -> PathType:
-        ann_name = Path(self.path_tar).stem.split('.')[0]
+        ann_name = self.name or Path(self.path_tar).stem.split('.')[0]
         return PATH_TMP / ann_name
 
     @property
