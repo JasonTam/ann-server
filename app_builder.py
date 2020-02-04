@@ -63,7 +63,7 @@ def build_many_app(path_ann_dir: PathType,
     scheduler = BackgroundScheduler()
 
     app = falcon.API()
-    ann_keys = s3.glob(os.path.join(path_ann_dir, '*.tar*'))
+    ann_keys = s3.glob(os.path.join(path_ann_dir, '**.tar*'))
     logging.info(f'{len(ann_keys)} ann indexes detected')
 
     ooi_dynamo_table = None
@@ -81,7 +81,9 @@ def build_many_app(path_ann_dir: PathType,
     app.req_options.auto_parse_form_urlencoded = True
     ann_d: Dict[str, ANNResource] = {}
     for path_tar in ann_keys:
-        ann_name = Path(path_tar).stem.split('.')[0]
+        # ann_name = Path(path_tar).stem.split('.')[0]
+        # Preserve prefix structure of glob
+        ann_name = path_tar.split(path_ann_dir.split(S3_URI_PREFIX)[-1])[-1]
 
         ann_r = ANNResource(path_tar,
                             ooi_dynamo_table=ooi_dynamo_table,
