@@ -83,7 +83,9 @@ def build_many_app(path_ann_dir: PathType,
     for path_tar in ann_keys:
         # ann_name = Path(path_tar).stem.split('.')[0]
         # Preserve prefix structure of glob
-        ann_name = path_tar.split(path_ann_dir.split(S3_URI_PREFIX)[-1])[-1]
+        ann_name = (path_tar
+            .split(path_ann_dir.split(S3_URI_PREFIX)[-1])[-1]
+            .strip('/').split('.')[0])
 
         ann_r = ANNResource(path_tar,
                             ooi_dynamo_table=ooi_dynamo_table,
