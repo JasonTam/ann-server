@@ -57,8 +57,8 @@ def needs_reload(path_tar: PathType,
         return True
     else:
         # Container re-use: check if new index exists on remote
-        remote_mtime = s3.ls(path_tar, detail=True, refresh=True
-                             )['LastModified']
+        s3.invalidate_cache(path_tar)
+        remote_mtime = s3.info(path_tar)['LastModified']
 
         return remote_mtime > ts_read_utc
 
