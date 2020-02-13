@@ -7,7 +7,7 @@ from typing import List, Dict
 
 class CrossANNResource(object):
     """
-    Operations that cross between multiple (usually 2) ANNResources
+    ANN lookups that cross between multiple (usually 2) ANNResources
     """
 
     def __init__(self, ann_resources: List[ANNResource],
