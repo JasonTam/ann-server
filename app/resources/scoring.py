@@ -19,18 +19,22 @@ class ScoringResource(object):
         self.ann_resources_d: Dict[str, ANNResource] = {
             a.name: a for a in ann_resources}
 
-    def on_get(self, req, resp):
-        # TODO: maybe have a verbose option and a succinct option
-        ids_1 = req.params['ids_1']
-        catalog_1 = req.params['catalog_1']
-        ids_2 = req.params['ids_2']
-        catalog_2 = req.params['catalog_2']
-        dist = req.get('dist') or 'cosine'
-
+    def on_post(self, req, resp):
         neighbors = []
         try:
             # TODO: more efficient to batch-get
             # TODO: limited by ids in same category
+            # TODO: maybe have a verbose option and a succinct option
+
+            payload_json_buf = req.bounded_stream
+            payload_json = json.load(payload_json_buf)
+
+            ids_1 = json.loads(payload_json.get('ids_1'))
+            catalog_1 = payload_json.get('catalog_1')
+            ids_2 = json.loads(payload_json.get('ids_2'))
+            catalog_2 = payload_json.get('catalog_2')
+            dist = payload_json.get('dist') or 'cosine'
+
             embs_1 = np.array([self.ann_resources_d[catalog_1].get_vector(i)
                                for i in ids_1])
             embs_2 = np.array([self.ann_resources_d[catalog_2].get_vector(i)
