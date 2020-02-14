@@ -28,10 +28,11 @@ class ScoringResource(object):
 
             payload_json_buf = req.bounded_stream
             payload_json = json.load(payload_json_buf)
+            print(payload_json)
 
-            ids_1 = json.loads(payload_json.get('ids_1'))
+            ids_1 = payload_json.get('ids_1')
             catalog_1 = payload_json.get('catalog_1')
-            ids_2 = json.loads(payload_json.get('ids_2'))
+            ids_2 = payload_json.get('ids_2')
             catalog_2 = payload_json.get('catalog_2')
             dist = payload_json.get('dist') or 'cosine'
 
@@ -44,9 +45,10 @@ class ScoringResource(object):
             norms_2 = np.linalg.norm(embs_2, axis=1)
 
             dot_arr = embs_1.dot(embs_2.T)
-            cos_arr = dot_arr / norms_1 / norms_2[:, None]
+            cos_arr = dot_arr / norms_1[:, None] / norms_2[None, :]
 
-            dists_struct = dict(zip(ids_2, cos_arr.tolist()))
+            dists_struct = dict(zip(
+                ids_1, map(lambda x: dict(zip(ids_2, x)), cos_arr)))
 
             resp.body = json.dumps(dists_struct)
             resp.status = falcon.HTTP_200
@@ -54,6 +56,3 @@ class ScoringResource(object):
         except ValueError:
             resp.status = falcon.HTTP_200
             resp.body = json.dumps([])
-
-        resp.status = falcon.HTTP_200
-        resp.body = json.dumps(neighbors)
