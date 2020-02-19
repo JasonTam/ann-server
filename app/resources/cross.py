@@ -1,5 +1,6 @@
 import falcon
 from .ann import ANNResource
+from ..io import needs_reload, load_via_tar, load_index, get_dynamo_emb
 import json
 from typing import List, Dict
 
@@ -30,8 +31,7 @@ class CrossANNResource(object):
                 q_emb = self.ann_resources_d[q_name].get_vector(q_id)
             elif self.fallback_dynamo_table is not None:
                 # Need to look up the vector and query by vector
-                q_emb = self.fallback_dynamo_table(
-                    self.fallback_dynamo_table, q_id)
+                q_emb = get_dynamo_emb(self.fallback_dynamo_table, q_id)
             else:
                 raise ValueError(f'ANN: {q_name} not found '
                                  f'and dynamo fallback failed')
