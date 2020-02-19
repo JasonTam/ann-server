@@ -128,7 +128,8 @@ def build_many_app(path_ann_dir: PathType,
                 ann_d[child].set_fallback(ann_d[parent])
         logging.info('... done linking fallbacks')
 
-    cross_r = CrossANNResource(list(ann_d.values()))
+    cross_r = CrossANNResource(list(ann_d.values()),
+                               fallback_dynamo_table=ooi_dynamo_table)
     app.add_route('/crossq', cross_r)
 
     healthcheck_r = HealthcheckResource(ann_name_l)
