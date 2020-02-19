@@ -132,9 +132,7 @@ class ANNResource(object):
 
         elif self.ooi_dynamo_table is not None:
             # Need to look up the vector and query by vector
-            q_emb = get_dynamo_emb(
-                self.ooi_dynamo_table,
-                self.ann_meta_d['n_dim'] * DTYPE_FMT, q_id)
+            q_emb = get_dynamo_emb(self.ooi_dynamo_table, q_id)
             if q_emb is None:
                 raise Exception(
                     'Q is ooi and doesnt exist in the ooi dynamo table')
@@ -189,9 +187,7 @@ class ANNResource(object):
             ann_index = self.ann_index
             q_emb = ann_index.get_item_vector(q_ind)
         elif self.ooi_dynamo_table is not None:
-            q_emb = get_dynamo_emb(
-                self.ooi_dynamo_table,
-                self.ann_meta_d['n_dim'] * DTYPE_FMT, q_id)
+            q_emb = get_dynamo_emb(self.ooi_dynamo_table, q_id)
         elif self.ooi_ann is not None:
             q_emb = self.ooi_ann.get_vector(q_id)
         else:

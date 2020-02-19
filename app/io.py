@@ -25,6 +25,7 @@ TIMESTAMP_LOCAL_KEY = 'timestamp.txt'
 DYNAMO_ID = 'variant_id'
 DYNAMO_KEY = 'repr'
 DTYPE_FMT = 'f'  # float32 struct
+DTYPE_SZ = 4  # float32 is 4 bytes
 SEED = 322
 
 PathType = Union[Path, str]
@@ -120,7 +121,6 @@ def load_ids(path_ids: PathType) -> Tuple[List[str], Dict[str, int]]:
 
 
 def get_dynamo_emb(table,
-                   d_fmt,
                    variant_id,
                    id_key=DYNAMO_ID, repr_key=DYNAMO_KEY):
     try:
@@ -129,5 +129,6 @@ def get_dynamo_emb(table,
     except (ClientError, KeyError) as e:
         return None
     else:
-        emb = struct.unpack(d_fmt, item[repr_key].value)
+        b_str = item[repr_key].value
+        emb = struct.unpack(DTYPE_FMT * (len(b_str) // DTYPE_SZ), b_str)
     return emb
