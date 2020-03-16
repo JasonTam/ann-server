@@ -205,9 +205,13 @@ class ANNResource(object):
             resp.body = json.dumps(neighbors)
             resp.status = falcon.HTTP_200
         except Exception as e:
-            resp.body = json.dumps(
-                {'Error': f'An internal server error has occurred:\n{e}'})
-            resp.status = falcon.HTTP_500
+#             resp.body = json.dumps(
+#                 {'Error': f'An internal server error has occurred:\n{e}'})
+#             resp.status = falcon.HTTP_500
+
+            # Return empty response with 200
+            resp.body = json.dumps([])
+            resp.status = falcon.HTTP_200
 
     def on_get(self, req, resp):
         """Retrieve vector for given id
