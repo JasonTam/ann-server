@@ -165,7 +165,7 @@ class ANNResource(object):
         incl_dist = payload.get('incl_dist') or False
         incl_score = bool(payload.get('incl_score')) or False
         thresh_score = payload.get('thresh_score')
-        thresh_score = float(thresh_score) if thresh_score else None
+        thresh_score = float(thresh_score) if thresh_score else False
 
         if 'id' in payload:
             q_id = payload['id']

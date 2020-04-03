@@ -26,7 +26,7 @@ class CrossANNResource(object):
         incl_dist = bool(req.params.get('incl_dist')) or False
         incl_score = bool(req.params.get('incl_score')) or False
         thresh_score = req.params.get('thresh_score')
-        thresh_score = float(thresh_score) if thresh_score else None
+        thresh_score = float(thresh_score) if thresh_score else False
 
         neighbors = []
         try:
