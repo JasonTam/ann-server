@@ -170,11 +170,11 @@ class ANNResource(object):
         if 'id' in payload:
             q_id = payload['id']
             neighbors = self.nn_from_id(
-                q_id, k, incl_dist=(incl_dist | incl_score | thresh_score))
+                q_id, k, incl_dist=(incl_dist or incl_score or thresh_score))
         elif 'emb' in payload:
             q_emb = payload['emb']
             neighbors = self.nn_from_emb(
-                q_emb, k, incl_dist=(incl_dist | incl_score | thresh_score))
+                q_emb, k, incl_dist=(incl_dist or incl_score or thresh_score))
         else:
             raise Exception('Payload must contain `id` or `emb`')
 

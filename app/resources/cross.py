@@ -41,7 +41,7 @@ class CrossANNResource(object):
 
             neighbors = self.ann_resources_d[c_name].nn_from_emb(
                 q_emb, k,
-                incl_dist=(incl_dist | incl_score | thresh_score)
+                incl_dist=(incl_dist or incl_score or thresh_score)
             )
 
             if incl_score or thresh_score:
