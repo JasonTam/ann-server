@@ -254,20 +254,25 @@ class ANNResource(object):
         }
 
 
-def dist_to_score(d, score_thresh=None):
+def dist_to_score(l, score_thresh=None):
     """
         Converts dict to distances to dict of scores
     NOTE: This is only for ANNOY's angular distance (which is [0, 2])
     https://github.com/spotify/annoy/issues/149
 
     Args:
-        d: Dict of distances {id: distance}
+        d: List of dict of distances [{id: dist}, {id:dist}, ...]
         score_thresh: threshold to filter scores on
 
     Returns: Dict of scores (where higher is better)
 
     """
     if score_thresh:
-        return {k: v / 2. for k, v in d.items() if v / 2. > score_thresh}
+        return [{kv[0]: kv[1] / 2.}
+                for d in l
+                for kv in d.items()
+                if (kv[1] / 2.) > score_thresh]
     else:
-        return {k: v / 2. for k, v in d.items()}
+        return [{kv[0]: kv[1] / 2.} 
+                for d in l 
+                for kv in d.items()]
