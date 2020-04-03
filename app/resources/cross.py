@@ -27,6 +27,7 @@ class CrossANNResource(object):
         incl_score = bool(req.params.get('incl_score')) or False
         thresh_score = req.params.get('thresh_score')
         thresh_score = float(thresh_score) if thresh_score else False
+        include_distances = bool(incl_dist or incl_score or thresh_score)
 
         neighbors = []
         try:
@@ -41,7 +42,7 @@ class CrossANNResource(object):
 
             neighbors = self.ann_resources_d[c_name].nn_from_emb(
                 q_emb, k,
-                incl_dist=(incl_dist or incl_score or thresh_score)
+                incl_dist=include_distances
             )
 
             if incl_score or thresh_score:

@@ -152,7 +152,7 @@ class ANNResource(object):
             raise Exception('Q is ooi and no ooi dynamo table was set')
 
         if incl_dist:
-            neighbors = [(n_id, d) for n_id, d in neighbors if n_id != q_id]
+            neighbors = [d for d in neighbors if list(d.keys())[0] != q_id]
         else:
             if q_id in neighbors:
                 neighbors.remove(q_id)
@@ -166,15 +166,16 @@ class ANNResource(object):
         incl_score = bool(payload.get('incl_score')) or False
         thresh_score = payload.get('thresh_score')
         thresh_score = float(thresh_score) if thresh_score else False
+        include_distances = bool(incl_dist or incl_score or thresh_score)
 
         if 'id' in payload:
             q_id = payload['id']
             neighbors = self.nn_from_id(
-                q_id, k, incl_dist=(incl_dist or incl_score or thresh_score))
+                q_id, k, incl_dist=include_distances)
         elif 'emb' in payload:
             q_emb = payload['emb']
             neighbors = self.nn_from_emb(
-                q_emb, k, incl_dist=(incl_dist or incl_score or thresh_score))
+                q_emb, k, incl_dist=include_distances)
         else:
             raise Exception('Payload must contain `id` or `emb`')
 
