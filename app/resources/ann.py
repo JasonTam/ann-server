@@ -218,7 +218,7 @@ class ANNResource(object):
 #             resp.body = json.dumps(
 #                 {'Error': f'An internal server error has occurred:\n{e}'})
 #             resp.status = falcon.HTTP_500
-
+            print(e)
             # Return empty response with 200
             resp.body = json.dumps([])
             resp.status = falcon.HTTP_200
