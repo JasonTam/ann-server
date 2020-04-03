@@ -1,5 +1,5 @@
 import falcon
-from .ann import ANNResource
+from .ann import ANNResource, dist_to_score
 from ..io import needs_reload, load_via_tar, load_index, get_dynamo_emb
 import json
 from typing import List, Dict
@@ -24,6 +24,9 @@ class CrossANNResource(object):
         c_name = req.params['catalog_name']
         k = int(req.params['k'])
         incl_dist = bool(req.params.get('incl_dist')) or False
+        incl_score = bool(req.params.get('incl_score')) or False
+        thresh_score = req.params.get('thresh_score')
+        thresh_score = float(thresh_score) if thresh_score else None
 
         neighbors = []
         try:
@@ -37,7 +40,13 @@ class CrossANNResource(object):
                                  f'and dynamo fallback failed')
 
             neighbors = self.ann_resources_d[c_name].nn_from_emb(
-                    q_emb, k, incl_dist=incl_dist)
+                q_emb, k,
+                incl_dist=(incl_dist | incl_score | thresh_score)
+            )
+
+            if incl_score or thresh_score:
+                neighbors = dist_to_score(neighbors, thresh_score)
+
         except ValueError:
             resp.status = falcon.HTTP_200
             resp.body = json.dumps([])

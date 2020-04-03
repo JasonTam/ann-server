@@ -136,14 +136,16 @@ class ANNResource(object):
             if q_emb is None:
                 raise Exception(
                     'Q is ooi and doesnt exist in the ooi dynamo table')
-            neighbors = self.nn_from_emb(q_emb, k, ann_index=ann_index)
+            neighbors = self.nn_from_emb(
+                q_emb, k, ann_index=ann_index, incl_dist=incl_dist)
         elif self.ooi_ann is not None:
             # Need to look up the vector and query by vector
             q_emb = self.ooi_ann.get_vector(q_id)
             if q_emb is None:
                 raise Exception(
                     'Q is ooi and doesnt exist in the ooi ann')
-            neighbors = self.nn_from_emb(q_emb, k, ann_index=ann_index)
+            neighbors = self.nn_from_emb(
+                q_emb, k, ann_index=ann_index, incl_dist=incl_dist)
         else:
             # TODO: there's a chance Q is in the fallback parent index
             # TODO: depending on how the indexes were created
@@ -160,14 +162,19 @@ class ANNResource(object):
     def nn_from_payload(self, payload: Dict):
         # TODO: parse and use `search_k`
         k = payload['k']
-        incl_dists = payload.get('incl_dist') or False
+        incl_dist = payload.get('incl_dist') or False
+        incl_score = bool(payload.get('incl_score')) or False
+        thresh_score = payload.get('thresh_score')
+        thresh_score = float(thresh_score) if thresh_score else None
 
         if 'id' in payload:
             q_id = payload['id']
-            neighbors = self.nn_from_id(q_id, k, incl_dist=incl_dists)
+            neighbors = self.nn_from_id(
+                q_id, k, incl_dist=(incl_dist | incl_score | thresh_score))
         elif 'emb' in payload:
             q_emb = payload['emb']
-            neighbors = self.nn_from_emb(q_emb, k, incl_dist=incl_dists)
+            neighbors = self.nn_from_emb(
+                q_emb, k, incl_dist=(incl_dist | incl_score | thresh_score))
         else:
             raise Exception('Payload must contain `id` or `emb`')
 
@@ -178,6 +185,9 @@ class ANNResource(object):
                 {**payload, **{'k': k - len(neighbors)}}
             )
             neighbors += neighbors_fallback
+
+        if incl_score or thresh_score:
+            neighbors = dist_to_score(neighbors, thresh_score)
 
         return neighbors[:k]
 
@@ -242,3 +252,22 @@ class ANNResource(object):
             'n_ids': len(self.ids),
             'head5_ids': self.ids[:5],
         }
+
+
+def dist_to_score(d, score_thresh=None):
+    """
+        Converts dict to distances to dict of scores
+    NOTE: This is only for ANNOY's angular distance (which is [0, 2])
+    https://github.com/spotify/annoy/issues/149
+
+    Args:
+        d: Dict of distances {id: distance}
+        score_thresh: threshold to filter scores on
+
+    Returns: Dict of scores (where higher is better)
+
+    """
+    if score_thresh:
+        return {k: v / 2. for k, v in d.items() if v / 2. > score_thresh}
+    else:
+        return {k: v / 2. for k, v in d.items()}
