@@ -269,11 +269,11 @@ def dist_to_score(l, score_thresh=None):
 
     """
     if score_thresh:
-        return [{kv[0]: kv[1] / 2.}
+        return [{kv[0]: 1. - kv[1] / 2.}
                 for d in l
                 for kv in d.items()
-                if (kv[1] / 2.) > score_thresh]
+                if (1. - kv[1] / 2.) > score_thresh]
     else:
-        return [{kv[0]: kv[1] / 2.} 
+        return [{kv[0]: 1. - kv[1] / 2.} 
                 for d in l 
                 for kv in d.items()]
