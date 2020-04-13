@@ -63,7 +63,11 @@ def build_many_app(path_ann_dir: PathType,
     scheduler = BackgroundScheduler()
 
     app = falcon.API()
-    ann_keys = s3.glob(os.path.join(path_ann_dir, '**.tar*'))
+    if path_ann_dir.startswith(S3_URI_PREFIX):
+        ann_keys = s3.glob(os.path.join(path_ann_dir, '**.tar*'))
+    else:
+        ann_keys = [str(p) for p in Path(path_ann_dir).glob('**/*.tar*')]
+
     logging.info(f'{len(ann_keys)} ann indexes detected')
 
     ooi_dynamo_table = None

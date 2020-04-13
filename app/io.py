@@ -8,6 +8,7 @@ import s3fs
 import datetime
 import tarfile
 import struct
+import os
 from pathlib import Path
 import logging
 
@@ -57,11 +58,16 @@ def needs_reload(path_tar: PathType,
         # no timestamp file means index is not downloaded/extracted yet
         return True
     else:
-        # Container re-use: check if new index exists on remote
-        s3.invalidate_cache(path_tar)
-        remote_mtime = s3.info(path_tar)['LastModified']
+        if is_s3_path(path_tar):
+            # Container re-use: check if new index exists on remote
+            s3.invalidate_cache(path_tar)
+            remote_mtime = s3.info(path_tar)['LastModified']
 
-        return remote_mtime > ts_read_utc
+            return remote_mtime > ts_read_utc
+        else:
+            mtime = datetime.datetime.fromtimestamp(
+                os.stat(path_tar).st_mtime, tz=datetime.timezone.utc)
+            return mtime > ts_read_utc
 
 
 def load_via_tar(path_tar: PathType,
@@ -73,7 +79,11 @@ def load_via_tar(path_tar: PathType,
         # Note: `fromisoformat` only in Py3.7
         # ts_read = datetime.datetime.utcnow().isoformat()
         ts_read = int(time())
-        ann_tar = tarfile.open(fileobj=s3.open(path_tar, 'rb'))
+        if is_s3_path(path_tar):
+            ann_tar = tarfile.open(fileobj=s3.open(path_tar, 'rb'))
+        else:
+            ann_tar = tarfile.open(fileobj=open(path_tar, 'rb'))
+
         ann_tar.extractall(path_extract)
 
         with open(path_local_ts_read, 'w') as f:
