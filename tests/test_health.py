@@ -69,7 +69,7 @@ def test_cross_query():
         + '&q_name=test_ann1'
         + '&catalog_name=test_ann2'
         + '&k=10'
-        + '&incl_score=True'
-        + '&incl_dist=True'
+        + '&incl_score=False'
+        + '&incl_dist=0'
         + '&thresh_score=0.4'
     )
