@@ -64,7 +64,9 @@ def build_many_app(path_ann_dir: PathType,
 
     app = falcon.API()
     if path_ann_dir.startswith(S3_URI_PREFIX):
-        ann_keys = s3.glob(os.path.join(path_ann_dir, '**.tar*'))
+        ann_keys = [
+            p if p.startswith(S3_URI_PREFIX) else S3_URI_PREFIX + p
+            for p in s3.glob(os.path.join(path_ann_dir, '**.tar*'))]
     else:
         ann_keys = [str(p) for p in Path(path_ann_dir).glob('**/*.tar*')]
 
