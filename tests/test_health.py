@@ -53,6 +53,13 @@ def test_query_distance_thresh_score():
     r = requests.post(ENDPOINT + '/ann/test_ann1/query', json=payload)
 
 
+def test_query_distance_score_thresh_score():
+
+    payload = {'id': '0', 'k': 10, 'thresh_score': 0.4,
+               'incl_dist': True, 'incl_score': True}
+
+    r = requests.post(ENDPOINT + '/ann/test_ann1/query', json=payload)
+
 
 def test_cross_query():
 
@@ -61,8 +68,8 @@ def test_cross_query():
         + '/crossq?q_id=0'
         + '&q_name=test_ann1'
         + '&catalog_name=test_ann2'
-        + '&k=6'
-        # + '&incl_score=True'
+        + '&k=10'
+        + '&incl_score=True'
         + '&incl_dist=True'
-        + '& score & thresh_score = 0.5'
+        + '&thresh_score=0.4'
     )

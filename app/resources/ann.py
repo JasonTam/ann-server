@@ -32,6 +32,32 @@ s3 = s3fs.S3FileSystem()
 dynamodb = boto3.resource('dynamodb')
 
 
+class Rec(object):
+
+    def __init__(self, id_, dist=None):
+        self.id_ = id_
+        self.dist = dist
+
+    @property
+    def score(self):
+        """
+        NOTE: This is only for ANNOY's angular distance (which is [0, 2])
+        https://github.com/spotify/annoy/issues/149"""
+
+        if self.dist is None:
+            return None
+        else:
+            return 1. - self.dist / 2.
+
+    def to_dict(self, incl_dist=True, incl_score=True):
+        d = {'id': self.id_}
+        if incl_dist:
+            d['dist'] = self.dist
+        if incl_score:
+            d['score'] = self.score
+        return d
+
+
 class ANNResource(object):
 
     def __init__(self, path_tar: PathType,
@@ -100,26 +126,27 @@ class ANNResource(object):
             logging.info(f'Reloading [{self.path_tar}] due to staleness')
             self.load(reload=True)
 
-    def ids_maybe_dists(self, ann_out, incl_dist
-                        ) -> Union[List[Any], List[Dict[Any, float]]]:
-        """Convenience fn for zipping weights if desired"""
+    def recs_via_ann_out(self, ann_out, incl_dist) -> List[Rec]:
+        """Convenience fn for constructing rec objects
+        from ann output
+        """
         if incl_dist:
             inds, dists = ann_out
-            ids = [self.ids[ind] for ind in inds]
-            neighbors = [
-                {'id': i, 'distance': d}
-                for i, d in zip(ids, dists)]
         else:
             inds = ann_out
-            ids = [{'id': self.ids[ind]} for ind in inds]
-            neighbors = ids
+            dists = [None] * len(inds)
+        ids = [self.ids[ind] for ind in inds]
+        neighbors = [
+            Rec(id_, dist) for id_, dist in zip(ids, dists)
+        ]
         return neighbors
 
-    def nn_from_emb(self, q_emb, k: int, ann_index=None, incl_dist=False):
+    def nn_from_emb(self, q_emb, k: int, ann_index=None, incl_dist=False
+                    ) -> List[Rec]:
         ann_index = ann_index or self.ann_index
         ann_out = ann_index.get_nns_by_vector(
             q_emb, k, include_distances=incl_dist)
-        neighbors = self.ids_maybe_dists(ann_out, incl_dist)
+        neighbors = self.recs_via_ann_out(ann_out, incl_dist)
         return neighbors
 
     def nn_from_id(self, q_id: str, k: int, ann_index=None, incl_dist=False):
@@ -130,7 +157,7 @@ class ANNResource(object):
 
             ann_out = ann_index.get_nns_by_item(
                 q_ind, k + 1, include_distances=incl_dist)
-            neighbors = self.ids_maybe_dists(ann_out, incl_dist)
+            neighbors = self.recs_via_ann_out(ann_out, incl_dist)
 
         elif self.ooi_dynamo_table is not None:
             # Need to look up the vector and query by vector
@@ -153,11 +180,11 @@ class ANNResource(object):
             # TODO: depending on how the indexes were created
             raise Exception('Q is ooi and no ooi dynamo table was set')
 
-        neighbors = [n for n in neighbors if n.get('id') != q_id]
+        neighbors = [n for n in neighbors if n.id_ != q_id]
 
         return neighbors
 
-    def nn_from_payload(self, payload: Dict):
+    def nn_from_payload(self, payload: Dict) -> List[Rec]:
         # TODO: parse and use `search_k`
         k = payload['k']
         incl_dist = payload.get('incl_dist') or False
@@ -185,14 +212,8 @@ class ANNResource(object):
             )
             neighbors += neighbors_fallback
 
-        if incl_score or thresh_score:
-            neighbors = dist_to_score(neighbors, thresh_score)
-            if not incl_dist:
-                for d in neighbors:
-                    d.pop('distance', None)
-            if not incl_score:
-                for d in neighbors:
-                    d.pop('score', None)
+        if thresh_score:
+            neighbors = [n for n in neighbors if n.score > thresh_score]
 
         return neighbors[:k]
 
@@ -216,13 +237,21 @@ class ANNResource(object):
             payload_json = json.load(payload_json_buf)
 
             neighbors = self.nn_from_payload(payload_json)
+            incl_dist = bool(payload_json.get('incl_dist')) or False
+            incl_score = bool(payload_json.get('incl_score')) or False
+            recs = [n.to_dict(incl_dist, incl_score) for n in neighbors]
 
-            resp.body = json.dumps(neighbors)
+            res = {
+                'recs': recs,
+                'id_type': '-',
+            }
+
+            resp.body = json.dumps(res)
             resp.status = falcon.HTTP_200
         except Exception as e:
-#             resp.body = json.dumps(
-#                 {'Error': f'An internal server error has occurred:\n{e}'})
-#             resp.status = falcon.HTTP_500
+            # resp.body = json.dumps(
+            #     {'Error': f'An internal server error has occurred:\n{e}'})
+            # resp.status = falcon.HTTP_500
             print(e)
             # Return empty response with 200
             resp.body = json.dumps([])
