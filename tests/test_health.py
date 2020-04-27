@@ -20,9 +20,38 @@ def test_ann_healthcheck():
 
 def test_query():
 
+    payload = {'id': '0', 'k': 10}
+
+    r = requests.post(ENDPOINT + '/ann/test_ann1/query', json=payload)
+
+
+def test_query_distance():
+
+    payload = {'id': '0', 'k': 10, 'incl_dist': True}
+
+    r = requests.post(ENDPOINT + '/ann/test_ann1/query', json=payload)
+
+
+def test_query_score():
+
     payload = {'id': '0', 'k': 10, 'incl_score': True}
 
     r = requests.post(ENDPOINT + '/ann/test_ann1/query', json=payload)
+
+
+def test_query_thresh_score():
+
+    payload = {'id': '0', 'k': 10, 'thresh_score': 0.4}
+
+    r = requests.post(ENDPOINT + '/ann/test_ann1/query', json=payload)
+
+
+def test_query_distance_thresh_score():
+
+    payload = {'id': '0', 'k': 10, 'thresh_score': 0.4, 'incl_dist': True}
+
+    r = requests.post(ENDPOINT + '/ann/test_ann1/query', json=payload)
+
 
 
 def test_cross_query():
@@ -33,6 +62,7 @@ def test_cross_query():
         + '&q_name=test_ann1'
         + '&catalog_name=test_ann2'
         + '&k=6'
-        + '&incl_score=True'
-        # + '& score & thresh_score = 0.5'
+        # + '&incl_score=True'
+        + '&incl_dist=True'
+        + '& score & thresh_score = 0.5'
     )

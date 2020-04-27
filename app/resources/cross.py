@@ -47,6 +47,12 @@ class CrossANNResource(object):
 
             if incl_score or thresh_score:
                 neighbors = dist_to_score(neighbors, thresh_score)
+                if not incl_dist:
+                    for d in neighbors:
+                        d.pop('distance', None)
+                if not incl_score:
+                    for d in neighbors:
+                        d.pop('score', None)
 
         except ValueError:
             resp.status = falcon.HTTP_200

@@ -106,10 +106,12 @@ class ANNResource(object):
         if incl_dist:
             inds, dists = ann_out
             ids = [self.ids[ind] for ind in inds]
-            neighbors = [{i: d} for i, d in zip(ids, dists)]
+            neighbors = [
+                {'id': i, 'distance': d}
+                for i, d in zip(ids, dists)]
         else:
             inds = ann_out
-            ids = [self.ids[ind] for ind in inds]
+            ids = [{'id': self.ids[ind]} for ind in inds]
             neighbors = ids
         return neighbors
 
@@ -151,11 +153,7 @@ class ANNResource(object):
             # TODO: depending on how the indexes were created
             raise Exception('Q is ooi and no ooi dynamo table was set')
 
-        if incl_dist:
-            neighbors = [d for d in neighbors if list(d.keys())[0] != q_id]
-        else:
-            if q_id in neighbors:
-                neighbors.remove(q_id)
+        neighbors = [n for n in neighbors if n.get('id') != q_id]
 
         return neighbors
 
@@ -189,6 +187,12 @@ class ANNResource(object):
 
         if incl_score or thresh_score:
             neighbors = dist_to_score(neighbors, thresh_score)
+            if not incl_dist:
+                for d in neighbors:
+                    d.pop('distance', None)
+            if not incl_score:
+                for d in neighbors:
+                    d.pop('score', None)
 
         return neighbors[:k]
 
@@ -255,25 +259,23 @@ class ANNResource(object):
         }
 
 
-def dist_to_score(l, score_thresh=None):
+def dist_to_score(l, score_thresh=float('-inf')):
     """
-        Converts dict to distances to dict of scores
+        Adds a key 'score' to a list of dictionaries with distance
     NOTE: This is only for ANNOY's angular distance (which is [0, 2])
     https://github.com/spotify/annoy/issues/149
 
     Args:
-        d: List of dict of distances [{id: dist}, {id:dist}, ...]
+        d: List of neighbor dicts [{'id': id, 'distance': 0.5}, ...]
         score_thresh: threshold to filter scores on
 
     Returns: Dict of scores (where higher is better)
 
     """
-    if score_thresh:
-        return [{kv[0]: 1. - kv[1] / 2.}
-                for d in l
-                for kv in d.items()
-                if (1. - kv[1] / 2.) > score_thresh]
-    else:
-        return [{kv[0]: 1. - kv[1] / 2.} 
-                for d in l 
-                for kv in d.items()]
+    if score_thresh is False:
+        score_thresh = float('-inf')
+
+    return [{'score': (1. - d['distance'] / 2.), **d}
+            for d in l
+            if (1. - d['distance'] / 2.) > score_thresh
+            ]
