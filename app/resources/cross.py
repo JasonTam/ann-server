@@ -24,8 +24,8 @@ class CrossANNResource(object):
         q_id = req.params['q_id']
         c_name = req.params['catalog_name']
         k = int(req.params['k'])
-        incl_dist = strtobool(req.params.get('incl_dist')) or False
-        incl_score = strtobool(req.params.get('incl_score')) or False
+        incl_dist = strtobool(req.params.get('incl_dist', '0')) or False
+        incl_score = strtobool(req.params.get('incl_score', '0')) or False
         thresh_score = req.params.get('thresh_score')
         thresh_score = float(thresh_score) if thresh_score else False
         include_distances = bool(incl_dist or incl_score or thresh_score)
