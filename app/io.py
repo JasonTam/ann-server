@@ -23,7 +23,7 @@ ANN_INDEX_KEY = 'index.ann'
 ANN_IDS_KEY = 'ids.txt'
 ANN_META_KEY = 'metadata.json'
 TIMESTAMP_LOCAL_KEY = 'timestamp.txt'
-DYNAMO_ID = 'variant_id'
+# DYNAMO_ID = 'variant_id'
 DYNAMO_KEY = 'repr'
 DTYPE_FMT = 'f'  # float32 struct
 DTYPE_SZ = 4  # float32 is 4 bytes
@@ -132,8 +132,9 @@ def load_ids(path_ids: PathType) -> Tuple[List[str], Dict[str, int]]:
 
 def get_dynamo_emb(table,
                    variant_id,
-                   id_key=DYNAMO_ID, repr_key=DYNAMO_KEY):
+                   repr_key=DYNAMO_KEY):
     try:
+        id_key = table.key_schema[0]['AttributeName']
         response = table.get_item(Key={id_key: variant_id})
         item = response['Item']
     except (ClientError, KeyError) as e:
